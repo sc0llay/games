@@ -1,0 +1,14 @@
+{
+  "name": "Engine Simulator",
+  "short_name": "Engine Sim",
+  "description": "Interactive 3D internal combustion engine simulator with sound, cutaways and configurable engine geometry.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1215",
+  "theme_color": "#0f1215",
+  "icons": [
+    { "src": "../icons/engine-sim-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons/engine-sim-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

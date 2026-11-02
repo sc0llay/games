@@ -1,0 +1,14 @@
+{
+  "name": "Elements Explorer",
+  "short_name": "Elements",
+  "description": "An interactive periodic table where every element is a sample you can spin and zoom.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "icons": [
+    { "src": "../icons/periodic-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons/periodic-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
