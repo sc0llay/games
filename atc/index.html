@@ -466,6 +466,8 @@ const AIRCRAFT_TYPES = {
   A225: { name: 'Antonov An-225 Mriya',cls: 'MIL', wake: 'J',  vr: 165, vapp: 150, vmin: 210, vmax: 330, mmo: 0.77, vclimb: 280, vcruise: 290, climb: [1500, 900],   desc: [1600, 2200], accel: 0.6, decel: 0.5, bank: 22, ceiling: 36000, roll: 75 },
   SR71: { name: 'SR-71 Blackbird',     cls: 'MIL', wake: 'UM', vr: 210, vapp: 175, vmin: 230, vmax: 450, mmo: 3.3,  vclimb: 400, vcruise: 450, climb: [10000, 6000], desc: [5000, 7000], accel: 3.0, decel: 1.5, bank: 30, ceiling: 85000, roll: 50 },
   X15:  { name: 'North American X-15', cls: 'MIL', wake: 'L',  vr: 200, vapp: 195, vmin: 200, vmax: 600, mmo: 6.7,  vclimb: 0,   vcruise: 300, climb: [0, 0],        desc: [9000, 12000], accel: 0.0, decel: 1.2, bank: 35, ceiling: 354200, roll: 25, glider: true },
+  TR3B: { name: 'TR-3B Black Manta',   cls: 'MIL', wake: 'L',  vr: 40,  vapp: 60,  vmin: 40,  vmax: 900, mmo: 9.0,  vclimb: 600, vcruise: 600, climb: [40000, 40000], desc: [30000, 30000], accel: 20, decel: 20, bank: 80, ceiling: 300000, roll: 3, stealth: true },
+  UFO:  { name: 'Sport Model saucer',  cls: 'MIL', wake: 'L',  vr: 30,  vapp: 50,  vmin: 30,  vmax: 2000, mmo: 40,  vclimb: 900, vcruise: 900, climb: [99000, 99000], desc: [99000, 99000], accel: 60, decel: 60, bank: 89, ceiling: 1000000, roll: 1, ufo: true },
 };
 
 // Lifetime successful landings needed to unlock each special type, plus its callsign style and a note.
@@ -481,6 +483,8 @@ const SPECIALS = [
   { type: 'A225', landings: 75,  callsign: 'ADB',   rt: 'Antonov',   note: 'Super-heavy: J-category wake, slow everything.', top: '459 kt (Mach 0.77)' },
   { type: 'SR71', landings: 100, callsign: 'ASPEN', rt: 'Aspen',     note: 'Arrives fast from the edge of the sector. Speed control is your friend.', top: 'Mach 3.3 at 80,000 ft' },
   { type: 'X15',  landings: 150, callsign: 'NASA',  rt: 'NASA',      note: 'Unpowered glider: cannot climb, cannot hold, cannot go around. Clear the way.', top: 'Mach 6.7 (3,937 kt) at 102,000 ft' },
+  { type: 'TR3B', landings: 500,  callsign: 'MANTA', rt: 'Manta',     note: 'Black triangle. Stealthy, hovers, stops on a dime. No wake to speak of.', top: 'Classified (est. Mach 9+)' },
+  { type: 'UFO',  landings: 1000, callsign: 'PAPOO', rt: 'Papoose',   note: 'The S-4 "Sport Model". Ignores most of physics.', top: 'Unknown' },
 ];
 
 
@@ -1384,7 +1388,7 @@ class Aircraft {
     }
     const end = this.app.end;
     this.world.onGoAround(this, reason);
-    this.app = null; this.clr.landing = false; this.goArounds++;
+    this.app = null; this.clr.landing = false; this.goArounds++; this.missedAt = this.world.t;
     this.nav.mode = 'HDG'; this.clr.hdg = end.hdg; this.clr.turnDir = null;
     this.clr.alt = Math.max(this.ap.ta >= 5000 ? 3000 : 2500, Math.ceil((this.ap.elev + 2500) / 500) * 500);
     this.clr.spd = Math.min(this.perf.vmax, Math.max(this.perf.vmin, 190));
@@ -1882,6 +1886,7 @@ function checkSafety(world) {
   for (const a of air) {
     if (a.onFinal) continue;
     if (a.kind === 'DEP' && a.vs > 200 && Math.hypot(a.x, a.y) < 8) continue;
+    if (a.missedAt != null && world.t - a.missedAt < 300 && (a.vs > 200 || Math.hypot(a.x, a.y) < 6)) continue; // on the published missed approach
     if (Math.hypot(a.x, a.y) < 2.5) continue;
     const mva = mvaAt(ap, a.x, a.y);
     const fut = a.alt + (a.vs / 60) * 30;
@@ -2285,8 +2290,9 @@ function newTraining() { return { owned: { handoff: true }, hist: {}, snooze: {}
 
 const DW_OFFSET = 5;      // downwind leg, nm either side of the final approach course
 const BASE_MIN = 11;      // earliest base turn, nm from the threshold (keeps the intercept below the glideslope)
+const URGENT_BASE = 7;    // emergencies may be turned onto a tight base
 const BASE_MAX = 26;      // beyond this the downwind is abandoned and the aircraft is sent to hold
-const SPACING_BUFFER = 2; // nm added to the minimum spacing when sequencing
+const SPACING_BUFFER = 3; // nm added to the minimum spacing when sequencing
 const MAX_COMMITTED = 5;  // arrivals being vectored but not yet established
 const HIST = 12;
 
@@ -2549,9 +2555,11 @@ class Assist {
 
   // ---------- landing ----------
   doLanding(ac) {
-    if (!ac.onFinal || ac.clr.landing || ac.nordo) return;
+    if (!ac.onFinal || ac.nordo) return;
+    if (ac.clr.landing && !(this.ojti('landing') && ac.distToThr() < 2.7 && ac.distToThr() > 1.2 && this.w.runwayOccupied(ac.app.end.runway, ac))) return;
     const w = this.w, d = ac.distToThr();
     if (d > 6) return;
+    if (this.ojti('landing') && d < 2.7 && d > 1.2 && w.runwayOccupied(ac.app.end.runway, ac) && this.free(ac)) { this.issue(ac, [{ t: 'GA' }]); return; }
     const free = !w.runwayOccupied(ac.app.end.runway, ac);
     if (this.ojti('landing')) { if (free && this.free(ac)) this.issue(ac, [{ t: 'CL' }]); return; }
     if (free && d < 5) this.hint(ac, 'cl', [{ t: 'CL' }], `established on final, ${d.toFixed(1)} nm, runway ${ac.app.rwy} is free`, 30);
@@ -2585,9 +2593,10 @@ class Assist {
       if (dist(ac.x, ac.y, o.x, o.y) > 35) continue;
       const orate = Math.max(Math.abs(o.vs), 500) / 60;
       for (let t = 0; t <= horizon; t += 10) {
-        const ax = ac.x + ac.vx / 3600 * t, ay = ac.y + ac.vy / 3600 * t;
-        const bx = o.x + o.vx / 3600 * t, by = o.y + o.vy / 3600 * t;
-        if (Math.hypot(ax - bx, ay - by) >= lat) continue;
+        const ah = ac.nav.mode === 'HOLD', oh = o.nav.mode === 'HOLD';
+        const ax = ah ? ac.x : ac.x + ac.vx / 3600 * t, ay = ah ? ac.y : ac.y + ac.vy / 3600 * t;
+        const bx = oh ? o.x : o.x + o.vx / 3600 * t, by = oh ? o.y : o.y + o.vy / 3600 * t;
+        if (Math.hypot(ax - bx, ay - by) >= lat + (ah ? 4 : 0) + (oh ? 4 : 0)) continue;
         const aAlt = ac.alt + clamp(level - ac.alt, -rate * t, rate * t);
         const oAlt = o.onFinal ? Math.max(ap.elev, o.alt + o.vs / 60 * t) : o.alt + clamp(o.clr.alt - o.alt, -orate * t, orate * t);
         if (Math.abs(aAlt - oAlt) < vert) return false;
@@ -2687,6 +2696,10 @@ class Assist {
 
     for (const x of flow) {
       const ac = x.ac, o = this.st(ac);
+      if (mine && !o.manual.lat && ac.app?.state === 'ARMED' && !ac.app.viaIF && o.stage === 'INT' && this.free(ac)) {
+        const L = this.local(f, ac.x, ac.y);
+        if (Math.abs(L.s) > 0.4) this.steer(ac, f.c - Math.sign(L.s) * 30, 20);
+      }
       if (ac.app || ac.nordo) continue;
       if (!mine || o.manual.lat) { this.userVectorHints(ac, f, flow); continue; }
       if (!f.ok) { this.toHold(ac); continue; }
@@ -2694,8 +2707,9 @@ class Assist {
       const L = this.local(f, ac.x, ac.y);
       if (!o.side) o.side = Math.sign(L.s) || 1;
       const sg = o.side;
+      const urgent = ac.emergency || ac.priority;
       if (o.stage === 'DW') {
-        if (L.a >= BASE_MIN && ac.alt - this.gsAlt(f, L.a) <= (Math.abs(L.s) + 1) * 300 && this.baseClear(ac, L, flow)) {
+        if ((L.a >= (urgent ? URGENT_BASE : BASE_MIN) && ac.alt - this.gsAlt(f, L.a) <= (Math.abs(L.s) + 1) * 300 && (urgent || this.baseClear(ac, L, flow))) || (urgent && L.a > BASE_MAX)) {
           o.stage = 'BASE';
           const cmds = [{ t: 'HDG', v: round5(ac.wca(f.c - sg * 90)) }];
           if (!o.manual.spd && ac.alt < 10000) cmds.push({ t: 'SPD', v: Math.round(clamp(180, ac.perf.vmin, ac.maxIas())) });
@@ -2709,7 +2723,8 @@ class Assist {
         if (!o.manual.spd && ac.alt < 10000 && !ac.clr.spd && ac.ias > 225 && this.free(ac)) this.issue(ac, [{ t: 'SPD', v: Math.round(clamp(210, ac.perf.vmin + 10, ac.maxIas())) }]);
       } else if (o.stage === 'BASE') {
         if (Math.abs(L.s) <= 2.2 || Math.sign(L.s) !== sg) {
-          this.issue(ac, [{ t: 'HDG', v: round5(ac.wca(f.c - sg * 30)) }, { t: 'ILS', rwy: f.end.id }]);
+          const side = Math.abs(L.s) > 0.4 ? Math.sign(L.s) : sg; // overshot: intercept from the side it is now on
+          this.issue(ac, [{ t: 'HDG', v: round5(ac.wca(f.c - side * 30)) }, { t: 'ILS', rwy: f.end.id }]);
           o.stage = 'INT';
         } else this.steer(ac, f.c - sg * 90, 20);
       } else if (o.stage === null) o.stage = 'DW'; // committed some other way (go-around)
@@ -2718,10 +2733,10 @@ class Assist {
     this.spacing(flow, f);
 
     // bring one holding / inbound aircraft into the flow per think
-    if (flow.filter(x => !x.ac.onFinal).length >= MAX_COMMITTED) return;
-    const cand = arr.filter(a => !this.committed(a) && !a.nordo && !this.st(a).manual.lat && (a.nav.mode === 'HOLD' || a.nav.mode === 'ROUTE' || a.nav.mode === 'DCT')
-      && (a.nav.mode === 'HOLD' || Math.hypot(a.x, a.y) < 34 || a.route.length <= 1) && this.free(a)
-      && !arr.some(b => b !== a && !this.committed(b) && b.alt < a.alt - 300 && b.alt > f.ifAlt - 900 && dist(a.x, a.y, b.x, b.y) < 8)) // leave the stack from the bottom
+    const full = flow.filter(x => !x.ac.onFinal).length >= MAX_COMMITTED;
+    const cand = arr.filter(a => !this.committed(a) && !a.nordo && !this.st(a).manual.lat && (a.nav.mode === 'HOLD' || a.nav.mode === 'ROUTE' || a.nav.mode === 'DCT') && this.free(a)
+      && ((a.emergency || a.priority) || (!full && (a.nav.mode === 'HOLD' || Math.hypot(a.x, a.y) < 34 || a.route.length <= 1)
+      && !arr.some(b => b !== a && !this.committed(b) && b.alt < a.alt - 300 && b.alt > f.ifAlt - 900 && dist(a.x, a.y, b.x, b.y) < 8)))) // leave the stack from the bottom
       .sort((p, q) => (q.priority || q.emergency ? 1 : 0) - (p.priority || p.emergency ? 1 : 0) || Math.hypot(p.x, p.y) - Math.hypot(q.x, q.y));
     for (const ac of cand) {
       const plan = this.entryPlan(ac, f, flow);
@@ -2748,15 +2763,28 @@ class Assist {
     for (let i = 0; i < seq.length; i++) {
       const { ac, tm } = seq[i], o = this.st(ac);
       const lead = seq[i - 1], comp = lead ? this.comp(lead.ac, ac, lead.tm) : 0;
+      // an emergency closing on someone not yet established: that aircraft gives way and is re-sequenced behind it
+      if (lead && (ac.emergency || ac.priority) && !lead.ac.onFinal && !lead.ac.emergency && !lead.ac.priority && !lead.ac.nordo
+        && !lead.ac.perf.glider && !this.st(lead.ac).manual.lat && this.free(lead.ac) && tm - lead.tm < this.minSp(lead.ac, ac) + 0.5 + comp) {
+        const lo = this.st(lead.ac), L = this.local(f, lead.ac.x, lead.ac.y);
+        lo.stage = 'DW'; lo.side = Math.sign(L.s) || 1;
+        const [px, py] = this.toWorld(f, Math.max(L.a, 0) + 6, lo.side * DW_OFFSET);
+        this.issue(lead.ac, [{ t: 'HDG', v: round5(lead.ac.wca(bearing(lead.ac.x, lead.ac.y, px, py))), cancelApp: true }]);
+      }
       // far too close and not yet on the localiser: break it off onto a downwind and re-sequence
-      if (lead && !ac.onFinal && !o.manual.lat && !ac.nordo && !ac.perf.glider && this.free(ac) && tm - lead.tm < this.minSp(lead.ac, ac) + 0.5 + comp) {
+      if (lead && !ac.onFinal && !o.manual.lat && !ac.nordo && !ac.perf.glider && !ac.emergency && !ac.priority && this.free(ac) && tm - lead.tm < this.minSp(lead.ac, ac) + 0.5 + comp) {
         const L = this.local(f, ac.x, ac.y);
         o.stage = 'DW'; o.side = Math.sign(L.s) || 1;
         const [px, py] = this.toWorld(f, Math.max(L.a, 0) + 6, o.side * DW_OFFSET);
         this.issue(ac, [{ t: 'HDG', v: round5(ac.wca(bearing(ac.x, ac.y, px, py))), cancelApp: true }]);
         continue;
       }
-      if (o.manual.spd || ac.nordo || !this.free(ac) || ac.alt > 10000) continue;
+      if (lead && ac.onFinal && lead.ac.onFinal && !o.manual.spd && !ac.nordo && this.free(ac) && !ac.perf.glider) {
+        const gapNow = tm - lead.tm, need = this.minSp(lead.ac, ac);
+        if (gapNow < need - 0.1 && tm > 2.5 && !ac.emergency) { this.issue(ac, [{ t: 'GA' }]); continue; }
+        if (gapNow < need + 1 && (ac.clr.spd || ac.ias) > ac.perf.vapp + 2) { o.spdAt = this.w.t; this.issue(ac, [{ t: 'SPD', v: Math.round(ac.perf.vapp) }]); continue; }
+      }
+      if (o.manual.spd || ac.nordo || !this.free(ac) || ac.alt > 10000 || ac.emergency || ac.priority) continue; // emergencies keep their speed
       const floor = ac.app && ac.distToThr() < 20 ? ac.perf.vapp + 15 : ac.perf.vmin;
       const slow = Math.round(Math.max(floor, Math.min(160, ac.maxIas())));
       const mid = Math.round(Math.max(floor, Math.min(180, ac.maxIas())));
@@ -2783,11 +2811,12 @@ class Assist {
       // don't route it through the downwind / base traffic it would have to descend past
       const crosses = flow.some(x => x.ac !== ac && !x.ac.app && ['DW', 'BASE'].includes(this.st(x.ac).stage)
         && Math.abs(x.ac.alt - f.ifAlt) < 1500 && segDist(x.ac.x, x.ac.y, ac.x, ac.y, f.ifPt.x, f.ifPt.y) < 6);
-      if (descentOk && !crosses && (this.slotClear(ac, tm, flow) || ac.perf.glider)) return { kind: 'ILS' };
-      return null;
+      const urgent = ac.emergency || ac.priority || ac.perf.glider;
+      if (descentOk && (urgent || (!crosses && this.slotClear(ac, tm, flow)))) return { kind: 'ILS' };
+      if (!(ac.emergency || ac.priority)) return null;
     }
     const side = Math.sign(L.s) || 1;
-    if (flow.filter(x => !x.ac.app && this.st(x.ac).side === side).length >= 3) return null;
+    if (!(ac.emergency || ac.priority) && flow.filter(x => !x.ac.app && this.st(x.ac).side === side).length >= 3) return null;
     return { kind: 'DW', side, a: L.a + Math.max(4, 0.8 * Math.abs(L.s - side * DW_OFFSET)) };
   }
 
@@ -3400,7 +3429,7 @@ class World {
     if (kind === 'GLIDER') this.pilotSay(ac, `no go-around possible, landing ${ac.app?.rwy || ''}`, `${spokenCallsign(ac, true)}, we're committed, no go-around capability`, { level: 'warn' });
   }
   onGoAround(ac, reason) {
-    const ctl = !/weather|wind/.test(reason);
+    const ctl = !/weather|wind|ILS failure|runway closed/.test(reason);  // events outside the controller's hands
     this.score.stats.goArounds++;
     if (ctl) this.score.stats.goAroundsCtl++;
     this.score.add('goAround', ctl ? POINTS.goAroundCtl : POINTS.goAroundWx, this.t, `${ac.callsign}: ${reason}`);
@@ -3441,6 +3470,8 @@ class World {
         const ac = pickAir(['ARR']);
         if (!ac) return false;
         ac.emergency = '7700'; ac.squawk = '7700'; ac.priority = true; ac.emergT = this.t;
+        // fair deadline: 15 min, or the straight-in flying time at its own approach speed plus 8 min if that is longer
+        ac.emergDue = Math.max(900, (dist(ac.x, ac.y, 0, 0) * 1.3 + 6) / Math.max(90, ac.perf.vapp + 20) * 3600 + 480);
         const what = e.what || rng.pick(['engine failure', 'smoke in the cabin', 'hydraulic failure', 'low fuel']);
         if (what === 'engine failure') ac.perf = { ...ac.perf, vmax: Math.min(ac.perf.vmax, 250), climb: [ac.perf.climb[0] * 0.4, ac.perf.climb[1] * 0.3] };
         const rwy = this.runwayConfig.arr;
@@ -3609,7 +3640,7 @@ class World {
         this.score.stats.readbackMissed++;
         a.rbErr = null;
       }
-      if (a.emergency === '7700' && a.emergT && this.t - a.emergT > 900 && !a.emergWarned) { a.emergWarned = true; this.score.add('emergencySlow', -150, this.t, `${a.callsign} emergency not landed within 15 min`); }
+      if (a.emergency === '7700' && a.emergT && this.t - a.emergT > (a.emergDue || 900) && !a.emergWarned) { a.emergWarned = true; this.score.add('emergencySlow', -150, this.t, `${a.callsign} emergency not landed within ${Math.round((a.emergDue || 900) / 60)} min`); }
       if (a.kind === 'ARR' && a.perf.glider && a.alt <= ap.elev + 50 && !a.app) { a.phase = 'GONE'; this.incident('MSAW', [a.id], `${a.callsign} forced landing off-airport`); }
       if (a.kind === 'DEP' && a.route.length === 0 && a.nav.mode === 'ROUTE') { a.nav.mode = 'HDG'; a.clr.hdg = a.hdg; }
     }
@@ -7941,6 +7972,8 @@ class Game {
     const s = mode === 'tutorial' ? { ...this.settings, ...{ respMin: 1, respMax: 2, readbackError: 0, weatherSeverity: 0, weatherChanges: false, eventRate: 0, autoLandClearance: true, autoRelease: false } } : this.settings;
     this.audio.unlock();
     this.begin({ airport, settings: s, seed, scenario, mode, assist: mode === 'tutorial' ? null : this.assistCfg() }, false);
+    // the menu refuses to close while the demo runs, so close it only once the real session exists
+    this.menus.close();
     if (mode === 'tutorial') this.menus.startTutorial(this.world); else this.menus.stopTutorial();
     this.focusCmd();
   }
