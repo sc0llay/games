@@ -453,6 +453,16 @@ const AIRCRAFT_TYPES = {
   B789: { name: 'Boeing 787-9',    cls: 'WB',  wake: 'H',  vr: 160, vapp: 145, vmin: 200, vmax: 340, mmo: 0.90, vclimb: 300, vcruise: 310, climb: [2500, 1500], desc: [2100, 2900], accel: 0.9, decel: 0.7, bank: 25, ceiling: 43000, roll: 60 },
   B77W: { name: 'Boeing 777-300ER',cls: 'WB',  wake: 'H',  vr: 165, vapp: 150, vmin: 210, vmax: 330, mmo: 0.89, vclimb: 300, vcruise: 310, climb: [2200, 1300], desc: [2000, 2800], accel: 0.8, decel: 0.6, bank: 25, ceiling: 43000, roll: 65 },
   A388: { name: 'Airbus A380',     cls: 'WB',  wake: 'J',  vr: 160, vapp: 140, vmin: 210, vmax: 330, mmo: 0.89, vclimb: 300, vcruise: 300, climb: [1900, 1100], desc: [1800, 2600], accel: 0.7, decel: 0.6, bank: 25, ceiling: 43000, roll: 70 },
+  // ---- Area 51 resident military traffic (classes FJ fast jet, HV heavy, UA drone; the C-130 flies as TP) ----
+  F16:  { name: 'F-16C Fighting Falcon', cls: 'FJ', wake: 'S',  vr: 140, vapp: 150, vmin: 170, vmax: 700, mmo: 2.0,  vclimb: 350, vcruise: 420, climb: [28000, 11000], desc: [7000, 8000], accel: 5.0, decel: 3.0, bank: 60, ceiling: 50000, roll: 25 },
+  F15E: { name: 'F-15E Strike Eagle',  cls: 'FJ', wake: 'S',  vr: 150, vapp: 155, vmin: 180, vmax: 750, mmo: 2.3,  vclimb: 350, vcruise: 420, climb: [30000, 12000], desc: [7000, 8000], accel: 5.5, decel: 3.0, bank: 60, ceiling: 60000, roll: 30 },
+  F22:  { name: 'F-22A Raptor',        cls: 'FJ', wake: 'S',  vr: 145, vapp: 150, vmin: 175, vmax: 750, mmo: 2.25, vclimb: 360, vcruise: 450, climb: [32000, 14000], desc: [8000, 9000], accel: 6.0, decel: 3.0, bank: 60, ceiling: 65000, roll: 25, stealth: true },
+  F35A: { name: 'F-35A Lightning II',  cls: 'FJ', wake: 'S',  vr: 145, vapp: 145, vmin: 175, vmax: 700, mmo: 1.6,  vclimb: 350, vcruise: 420, climb: [25000, 10000], desc: [7000, 8000], accel: 5.0, decel: 3.0, bank: 60, ceiling: 50000, roll: 28, stealth: true },
+  T38:  { name: 'T-38C Talon',         cls: 'FJ', wake: 'L',  vr: 145, vapp: 155, vmin: 170, vmax: 600, mmo: 1.3,  vclimb: 330, vcruise: 380, climb: [20000, 8000],  desc: [6000, 7000], accel: 4.0, decel: 2.5, bank: 60, ceiling: 50000, roll: 32 },
+  KC35: { name: 'KC-135R Stratotanker',cls: 'HV', wake: 'H',  vr: 155, vapp: 140, vmin: 200, vmax: 350, mmo: 0.86, vclimb: 290, vcruise: 300, climb: [2600, 1500],  desc: [2200, 2800], accel: 0.9, decel: 0.7, bank: 25, ceiling: 45000, roll: 60 },
+  C17:  { name: 'C-17A Globemaster III',cls: 'HV', wake: 'H', vr: 120, vapp: 125, vmin: 180, vmax: 350, mmo: 0.82, vclimb: 280, vcruise: 300, climb: [3000, 1700],  desc: [2500, 3200], accel: 1.0, decel: 0.9, bank: 25, ceiling: 45000, roll: 35 },
+  C130: { name: 'C-130J Hercules',     cls: 'TP', wake: 'LM', vr: 110, vapp: 120, vmin: 140, vmax: 280, vclimb: 180, vcruise: 250, climb: [2000, 1000],  desc: [1800, 2200], accel: 1.2, decel: 1.1, bank: 25, ceiling: 28000, roll: 30 },
+  MQ9:  { name: 'MQ-9 Reaper',         cls: 'UA', wake: 'L',  vr: 80,  vapp: 90,  vmin: 90,  vmax: 230, mmo: 0.45, vclimb: 120, vcruise: 180, climb: [1200, 700],   desc: [1200, 1500], accel: 0.8, decel: 0.8, bank: 25, ceiling: 50000, roll: 25 },
   // ---- special / military: unlocked by lifetime landings (see SPECIALS) ----
   // vmax = max indicated/equivalent airspeed (kt), mmo = max Mach. Top true airspeed comes from the Mach limit at altitude.
   EUFI: { name: 'Eurofighter Typhoon', cls: 'MIL', wake: 'S',  vr: 130, vapp: 150, vmin: 180, vmax: 750, mmo: 2.0,  vclimb: 350, vcruise: 400, climb: [30000, 12000], desc: [8000, 9000], accel: 6.0, decel: 3.0, bank: 60, ceiling: 65000, roll: 30 },
@@ -476,11 +486,11 @@ const SPECIALS = [
   { type: 'A10',  landings: 15,  callsign: 'HAWG',  rt: 'Hawg',      note: 'Slow, sturdy, low and steady.', top: '381 kt at 5,000 ft' },
   { type: 'F35',  landings: 20,  callsign: 'LTNG',  rt: 'Lightning', note: 'Short roll-out — vacates the runway quickly.', top: 'Mach 1.6 at altitude, 700 kt at sea level' },
   { type: 'SU57', landings: 30,  callsign: 'FELON', rt: 'Felon',     note: 'Visiting display aircraft. Very high performance.', top: 'Mach 2.0 at altitude, 756 kt at sea level' },
-  { type: 'CONC', landings: 40,  callsign: 'BAW00', rt: 'Speedbird Concorde', note: 'Heavy wake, high approach speed — space it out.', top: 'Mach 2.04 cruise at FL600' },
+  { type: 'CONC', landings: 40,  civil: true, callsign: 'BAW00', rt: 'Speedbird Concorde', note: 'Heavy wake, high approach speed — space it out.', top: 'Mach 2.04 cruise at FL600' },
   { type: 'F117', landings: 45,  callsign: 'BAT',   rt: 'Bat',       note: 'Stealth: faint primary return. No flaps, so a fast approach. Give it a long final.', top: 'Mach 0.92' },
   { type: 'B2',   landings: 50,  callsign: 'SPIRT', rt: 'Spirit',    note: 'Stealth: primary returns are faint. Heavy wake.', top: 'Mach 0.95' },
   { type: 'U2',   landings: 60,  callsign: 'DRAGN', rt: 'Dragon',    note: 'Glider-like wings, very slow descent. Plan descents early.', top: '410 kt true at 70,000 ft' },
-  { type: 'A225', landings: 75,  callsign: 'ADB',   rt: 'Antonov',   note: 'Super-heavy: J-category wake, slow everything.', top: '459 kt (Mach 0.77)' },
+  { type: 'A225', landings: 75,  civil: true, callsign: 'ADB',   rt: 'Antonov',   note: 'Super-heavy: J-category wake, slow everything.', top: '459 kt (Mach 0.77)' },
   { type: 'SR71', landings: 100, callsign: 'ASPEN', rt: 'Aspen',     note: 'Arrives fast from the edge of the sector. Speed control is your friend.', top: 'Mach 3.3 at 80,000 ft' },
   { type: 'X15',  landings: 150, callsign: 'NASA',  rt: 'NASA',      note: 'Unpowered glider: cannot climb, cannot hold, cannot go around. Clear the way.', top: 'Mach 6.7 (3,937 kt) at 102,000 ft' },
   { type: 'TR3B', landings: 500,  callsign: 'MANTA', rt: 'Manta',     note: 'Black triangle. Stealthy, hovers, stops on a dime. No wake to speak of.', top: 'Classified (est. Mach 9+)' },
@@ -488,7 +498,7 @@ const SPECIALS = [
 ];
 
 
-const CLASS_NAMES = { GA: 'Light GA', TP: 'Turboprop', RJ: 'Regional jet', NB: 'Narrowbody', WB: 'Widebody', MIL: 'Special' };
+const CLASS_NAMES = { GA: 'Light GA', TP: 'Turboprop', RJ: 'Regional jet', NB: 'Narrowbody', WB: 'Widebody', MIL: 'Special', FJ: 'Fast jet', HV: 'Military heavy', UA: 'Drone' };
 
 // Wake turbulence radar separation on final, nm (UK CAP493 table). Missing pairs fall back to radar minimum.
 const WAKE_NM = {
@@ -521,6 +531,17 @@ const OPERATORS = [
   { icao: 'TCX', rt: 'Kestrel',    fleet: ['B752', 'A321'], w: 1 },
   { icao: 'HLE', rt: 'Helimed',    fleet: ['DH8D'], w: 0, medical: true },
   { icao: 'G',   rt: null,         fleet: ['C172', 'PA28'], w: 1.5, ga: true },
+  // military: only at airports whose traffic is flagged mil (Area 51); short tactical callsigns
+  { icao: 'VIPER', rt: 'Viper',  fleet: ['F16'], w: 3, mil: true },
+  { icao: 'DUDE',  rt: 'Dude',   fleet: ['F15E'], w: 2, mil: true },
+  { icao: 'RAPTR', rt: 'Raptor', fleet: ['F22'], w: 2, mil: true },
+  { icao: 'BOLT',  rt: 'Bolt',   fleet: ['F35A'], w: 2.5, mil: true },
+  { icao: 'TALON', rt: 'Talon',  fleet: ['T38'], w: 1.5, mil: true },
+  { icao: 'BANDT', rt: 'Bandit', fleet: ['F16', 'T38'], w: 1, mil: true },
+  { icao: 'SHELL', rt: 'Shell',  fleet: ['KC35'], w: 1, mil: true },
+  { icao: 'RCH',   rt: 'Reach',  fleet: ['C17'], w: 1, mil: true },
+  { icao: 'HERKY', rt: 'Herky',  fleet: ['C130'], w: 1, mil: true },
+  { icao: 'REAPR', rt: 'Reaper', fleet: ['MQ9'], w: 1, mil: true },
 ];
 
 return { AIRCRAFT_TYPES, SPECIALS, CLASS_NAMES, WAKE_NM, OPERATORS };
@@ -542,7 +563,7 @@ const DEFAULTS = {
   eventRate: 0.6, specials: true,
   voice: true, voiceAtc: true, voiceCoach: true, audio: true, volume: 0.6,
   style: 'phosphor', scanlines: true, noise: true, bloom: true,
-  vectorMin: 1, trails: 6, rangeRings: true, showMva: true, showAirways: true, showSidStar: false, showTerrain: true,
+  vectorMin: 1, trails: 6, rangeRings: true, showMva: true, showAirways: true, showSidStar: false, showTerrain: true, satellite: true,
   uiScale: 1,
 };
 
@@ -840,6 +861,107 @@ const AIRPORTS = [
     terrain: [{ label: '1000', line: [[340, 2.6], [20, 3.2], [60, 2.2], [100, 2.4], [140, 3.6], [170, 2.6], [215, 2.4], [260, 2.6], [300, 2.6], [340, 2.6]] }],
     spots: [{ pos: [20, 3.2], elev: 1290, name: 'BEINN MHOR' }, { pos: [80, 34], elev: 2650, name: '' }],
     traffic: { arrMix: { GA: 1, TP: 3, RJ: 1.5, NB: 3, WB: 0.6 }, depShare: 0.42, overShare: 0.18 },
+  },
+
+  // Homey Airport / Groom Lake (Area 51), Nevada. Real layout and terrain, approximate; procedures fictional.
+  // Military traffic only. satellite: the radar draws a shaded-relief desert underlay from data/groom.js.
+  {
+    id: 'A51', icao: 'KXTA', name: 'Homey (Area 51)', city: 'Dreamland',
+    blurb: 'Groom Lake, Nevada · military only · 12,000 ft runway · satellite map',
+    elev: 4462, ta: 18000, tl: 180, sectorRadius: 50, ceiling: 32500,
+    appFreq: '126.165', twrFreq: '120.575', atisFreq: '134.750',
+    tower: { pos: [238, 0.62], height: 120 },
+    wind: { dir: 330, spd: 9, gust: 0 }, qnh: 1016, vis: 9999, cloud: 25000, temp: 24,
+    satellite: true, desert: true, dem: 'groom',
+    runways: [
+      { name: '14L/32R', center: [0, 0], hdg: 143, lengthFt: 12000, widthFt: 200,
+        ends: [
+          { id: '14L', ils: { freq: '110.70', gs: 3.0, dh: 250 }, faf: { name: 'SCOTY', dist: 6.5, alt: 6500 }, if: { name: 'KAWIC', dist: 11.5, alt: 8000 } },
+          { id: '32R', ils: { freq: '109.30', gs: 3.0, dh: 250 }, faf: { name: 'JUMBO', dist: 6.5, alt: 6500 }, if: { name: 'BOMBR', dist: 11.5, alt: 8000 } },
+        ] },
+      { name: '12/30', center: [208, 1.05], hdg: 120, lengthFt: 5420, widthFt: 120,
+        ends: [{ id: '12', ils: null, faf: null, if: null }, { id: '30', ils: null, faf: null, if: null }] },
+    ],
+    defaultRunway: { arr: '32R', dep: '32R' },
+    waypoints: {
+      NELIS: [165, 48], ARGUS: [161, 33], DREAM: [156, 21],
+      CREEC: [205, 48], MRCRY: [212, 33], YUCCA: [222, 21],
+      CEDAR: [78, 48], ALAMO: [76, 35], TIKAB: [74, 22],
+      TONAH: [315, 48], SARCO: [306, 34], BELTD: [298, 22],
+      HIKOS: [22, 48], RACHL: [7, 25], DELMR: [110, 48], INDIN: [190, 48], BEATY: [255, 48], GOLDF: [330, 48],
+      GRMLK: [35, 7], WSIDE: [250, 13], SKULL: [160, 16], EMGRT: [335, 22],
+    },
+    holds: {
+      DREAM: { inbound: 330, turn: 'R', minAlt: 10000 }, YUCCA: { inbound: 30, turn: 'L', minAlt: 10000 },
+      TIKAB: { inbound: 255, turn: 'R', minAlt: 12000 }, BELTD: { inbound: 120, turn: 'L', minAlt: 12000 },
+    },
+    stars: [
+      { name: 'NELIS3', route: ['NELIS', 'ARGUS', 'DREAM'], entryAlt: 17000, entrySpd: 300 },
+      { name: 'CREEC3', route: ['CREEC', 'MRCRY', 'YUCCA'], entryAlt: 16000, entrySpd: 300 },
+      { name: 'CEDAR3', route: ['CEDAR', 'ALAMO', 'TIKAB'], entryAlt: 19000, entrySpd: 300 },
+      { name: 'TONAH3', route: ['TONAH', 'SARCO', 'BELTD'], entryAlt: 20000, entrySpd: 300 },
+    ],
+    sids: [
+      { name: 'GOLDF2', rwy: '32R', route: ['EMGRT', 'GOLDF'], alt: 12000 },
+      { name: 'HIKOS2', rwy: '32R', route: ['EMGRT', 'RACHL', 'HIKOS'], alt: 12000 },
+      { name: 'BEATY2', rwy: '32R', route: ['WSIDE', 'BEATY'], alt: 12000 },
+      { name: 'INDIN2', rwy: '32R', route: ['WSIDE', 'INDIN'], alt: 12000 },
+      { name: 'DELMR2', rwy: '32R', route: ['GRMLK', 'DELMR'], alt: 12000 },
+      { name: 'INDIN1', rwy: '14L', route: ['SKULL', 'INDIN'], alt: 12000 },
+      { name: 'BEATY1', rwy: '14L', route: ['SKULL', 'YUCCA', 'BEATY'], alt: 12000 },
+      { name: 'DELMR1', rwy: '14L', route: ['DELMR'], alt: 12000 },
+      { name: 'HIKOS1', rwy: '14L', route: ['GRMLK', 'RACHL', 'HIKOS'], alt: 12000 },
+      { name: 'GOLDF1', rwy: '14L', route: ['GRMLK', 'EMGRT', 'GOLDF'], alt: 12000 },
+    ],
+    airways: [
+      { name: 'MTR-1', route: ['TONAH', 'SARCO', 'BELTD', 'YUCCA', 'CREEC'] },
+      { name: 'MTR-2', route: ['HIKOS', 'TIKAB', 'DELMR'] },
+      { name: 'MTR-3', route: ['GOLDF', 'EMGRT', 'RACHL'] },
+      { name: 'NELLIS', route: ['NELIS', 'ARGUS', 'DREAM'] },
+    ],
+    adjacent: [
+      { name: 'NELLIS CONTROL', freq: '126.650', fixes: ['INDIN', 'NELIS', 'CREEC', 'BEATY'], minAlt: 12000 },
+      { name: 'SALT LAKE CTR', freq: '133.650', fixes: ['DELMR', 'CEDAR', 'HIKOS'], minAlt: 12000 },
+      { name: 'TONOPAH', freq: '124.950', fixes: ['GOLDF', 'TONAH'], minAlt: 12000 },
+    ],
+    overflights: [
+      { route: ['TONAH', 'SARCO', 'BELTD', 'YUCCA', 'CREEC'], levels: [21000, 23000, 25000] },
+      { route: ['HIKOS', 'TIKAB', 'DELMR'], levels: [24000, 26000, 28000] },
+      { route: ['GOLDF', 'EMGRT', 'RACHL', 'CEDAR'], levels: [27000, 29000] },
+    ],
+    mva: [
+      { wedge: [0, 360, 0, 10], alt: 6500 },
+      { wedge: [45, 130, 3, 12], alt: 8700 },
+      { wedge: [340, 60, 10, 32], alt: 11500 }, { wedge: [340, 60, 32, 55], alt: 10500 },
+      { wedge: [60, 130, 12, 55], alt: 10000 },
+      { wedge: [130, 160, 10, 25], alt: 8000 }, { wedge: [160, 200, 10, 25], alt: 9000 }, { wedge: [130, 200, 25, 55], alt: 10500 },
+      { wedge: [200, 250, 10, 55], alt: 8500 },
+      { wedge: [250, 310, 10, 55], alt: 11000 },
+      { wedge: [310, 340, 10, 25], alt: 8000 }, { wedge: [310, 340, 25, 55], alt: 10000 },
+    ],
+    restricted: [
+      { name: 'S-4', label: 'PAPOOSE LAKE', circle: [[188, 8.5], 2.0], floor: 0, ceil: 99000, active: true },
+      { name: 'R4809', label: 'TONOPAH RANGE', circle: [[348, 40], 6], floor: 0, ceil: 50000, active: true },
+      { name: 'R4808S', label: 'PAHUTE MESA', circle: [[278, 33], 4.5], floor: 0, ceil: 30000, active: true },
+      { name: 'R4806W', label: 'DESERT RANGE', circle: [[128, 31], 6], floor: 0, ceil: 30000, active: true },
+    ],
+    coast: [],
+    land: [],
+    terrain: [
+      { label: '6000', line: [[318, 8.5], [345, 7.0], [10, 8.0], [32, 10.5], [42, 18], [40, 30], [30, 42], [24, 50]] },
+      { label: '8000', line: [[358, 11], [10, 12], [20, 13.8], [28, 18.5], [31, 26], [24, 36]] },
+      { label: '6000', line: [[50, 4.6], [70, 4.6], [90, 5.0], [108, 6.0], [118, 7.6], [100, 7.0], [80, 6.3], [60, 5.4], [50, 4.6]] },
+      { label: '6000', line: [[52, 15], [66, 17], [76, 19], [88, 24], [96, 32], [97, 42]] },
+      { label: '6000', line: [[118, 8.6], [140, 10.2], [162, 11.3], [180, 13.0], [196, 14.4]] },
+      { label: '8000', line: [[300, 22], [292, 17], [283, 13.4], [270, 14.4], [258, 19]] },
+      { label: '6000', line: [[318, 23], [302, 15.5], [287, 11.5], [270, 11.6], [253, 15.5], [244, 22]] },
+    ],
+    spots: [
+      { pos: [16, 13.5], elev: 9380, name: 'BALD MTN' }, { pos: [74, 22], elev: 7908, name: 'TIKABOO PK' },
+      { pos: [80, 5.3], elev: 6900, name: 'WHITE SIDES' }, { pos: [284, 14], elev: 9280, name: 'BELTED PK' },
+      { pos: [168, 12], elev: 7090, name: 'PAPOOSE RANGE' },
+    ],
+    traffic: { mil: true, arrMix: { FJ: 6, HV: 1.4, TP: 1, UA: 0.6 }, depShare: 0.45, overShare: 0.2, specialRate: 0.14 },
   },
 ];
 
@@ -1691,10 +1813,10 @@ const { bearing, hdgVec, dist } = __m("js/core/geo.js");
 const { mvaAt } = __m("js/sim/airport.js");
 const GA_LETTERS = 'ABCDEFGHIJKLMNOPRSTUVWXYZ';
 
-function pickType(rng, mix, kind) {
+function pickType(rng, mix, kind, mil = false) {
   const classes = Object.keys(mix).filter(c => !(kind === 'OVR' && c === 'GA'));
   const cls = rng.weighted(classes, c => mix[c]);
-  const ops = OPERATORS.filter(o => o.w > 0 && o.fleet.some(t => AIRCRAFT_TYPES[t].cls === cls));
+  const ops = OPERATORS.filter(o => o.w > 0 && !!o.mil === mil && o.fleet.some(t => AIRCRAFT_TYPES[t].cls === cls));
   const op = rng.weighted(ops, o => o.w);
   const types = op.fleet.filter(t => AIRCRAFT_TYPES[t].cls === cls);
   return { op, type: rng.pick(types) };
@@ -1704,6 +1826,7 @@ function makeCallsign(rng, op, used) {
   for (let n = 0; n < 50; n++) {
     let cs;
     if (op.ga) cs = 'G' + Array.from({ length: 4 }, () => GA_LETTERS[rng.int(0, GA_LETTERS.length - 1)]).join('');
+    else if (op.mil) cs = op.icao + rng.int(11, 99); // tactical: VIPER21
     else {
       const style = rng.next();
       const num = style < 0.45 ? rng.int(1, 999) : style < 0.85 ? rng.int(1000, 9899) : rng.int(10, 99);
@@ -1751,7 +1874,7 @@ function routeMva(ap, g, route) {
 function arrivalSpec(world, opts = {}) {
   const ap = world.ap, rng = world.rng;
   const star = opts.star ? ap.stars.find(s => s.name === opts.star) : rng.pick(ap.stars);
-  const { op, type } = opts.type ? { op: OPERATORS.find(o => o.icao === (opts.op || 'BAW')) || OPERATORS[0], type: opts.type } : pickType(rng, ap.traffic.arrMix, 'ARR');
+  const { op, type } = opts.type ? { op: OPERATORS.find(o => o.icao === (opts.op || 'BAW')) || OPERATORS[0], type: opts.type } : pickType(rng, ap.traffic.arrMix, 'ARR', !!ap.traffic.mil);
   const perf = AIRCRAFT_TYPES[type];
   const g = entryGeometry(ap, star.route, opts.back ?? 3);
   let alt = opts.alt ?? (perf.cls === 'GA' ? rng.pick([4000, 5000, 6000]) : star.entryAlt + rng.int(-1, 1) * 1000);
@@ -1773,10 +1896,10 @@ function departureSpec(world, opts = {}) {
   const rwy = world.runwayConfig.dep;
   const sids = ap.sids.filter(s => s.rwy === rwy);
   const sid = opts.sid ? (sids.find(s => s.name.startsWith(opts.sid)) || sids[0]) : rng.pick(sids);
-  const { op, type } = opts.type ? { op: OPERATORS.find(o => o.icao === (opts.op || 'EZY')) || OPERATORS[1], type: opts.type } : pickType(rng, ap.traffic.arrMix, 'DEP');
+  const { op, type } = opts.type ? { op: OPERATORS.find(o => o.icao === (opts.op || 'EZY')) || OPERATORS[1], type: opts.type } : pickType(rng, ap.traffic.arrMix, 'DEP', !!ap.traffic.mil);
   const end = ap.ends[rwy];
   const perf = AIRCRAFT_TYPES[type];
-  const rfl = perf.cls === 'GA' ? rng.pick([4000, 5000]) : perf.cls === 'TP' ? rng.pick([17000, 19000, 21000, 23000]) : rng.pick([24000, 26000, 30000, 34000, 36000]);
+  const rfl = perf.cls === 'GA' ? rng.pick([4000, 5000]) : perf.cls === 'UA' ? rng.pick([17000, 19000, 21000]) : perf.cls === 'TP' ? rng.pick([17000, 19000, 21000, 23000]) : rng.pick([24000, 26000, 30000, 34000, 36000]);
   return { kind: 'DEP', op, type, x: end.thrX, y: end.thrY, hdg: end.hdg, alt: ap.elev, ias: 0, phase: 'HOLDING_POINT',
     route: sid.route.slice(), routeName: sid.name, exitFix: sid.exit, depRwy: rwy, clrAlt: Math.min(sid.alt, perf.ceiling), rfl, callsign: opts.callsign };
 }
@@ -1787,7 +1910,7 @@ function overflightSpec(world, opts = {}) {
   let ov = opts.route ? { route: opts.route, levels: [opts.alt || 19000] } : rng.pick(ap.overflights);
   let route = ov.route.slice();
   if (!opts.route && rng.chance(0.5)) route = route.reverse();
-  const { op, type } = pickType(rng, ap.traffic.arrMix, 'OVR');
+  const { op, type } = pickType(rng, ap.traffic.arrMix, 'OVR', !!ap.traffic.mil);
   const perf = AIRCRAFT_TYPES[type];
   const g = entryGeometry(ap, route, 3);
   let alt = Math.min(opts.alt || rng.pick(ov.levels), perf.ceiling);
@@ -3081,7 +3204,7 @@ class World {
     this.events = (scenario?.events || []).map(e => ({ ...e, done: false }));
     this.scripted = (scenario?.traffic || []).map(e => ({ ...e, done: false }));
     this.randomTraffic = scenario ? scenario.randomTraffic !== false : true;
-    this.specialsUnlocked = SPECIALS.filter(s => specials.includes(s.type));
+    this.specialsUnlocked = SPECIALS.filter(s => specials.includes(s.type) && !(this.ap.traffic.mil && s.civil)); // Area 51: military only
     this.ended = false;
     this.selected = null;
     this.messages = [];
@@ -3167,7 +3290,7 @@ class World {
       this.spawn[k] = Math.max(mean * 0.35, -Math.log(1 - this.rng.next()) * mean);
       if (live >= cap) continue;
       if (k === 'arr') {
-        const special = s.specials && this.specialsUnlocked.length && this.rng.chance(0.06) && !this.aircraft.some(a => a.special && a.phase !== 'GONE');
+        const special = s.specials && this.specialsUnlocked.length && this.rng.chance(ap.traffic.specialRate ?? 0.06) && !this.aircraft.some(a => a.special && a.phase !== 'GONE');
         const spec = special ? specialSpec(this, this.rng.pick(this.specialsUnlocked)) : arrivalSpec(this);
         if (spec) this.addAircraft(spec); else this.spawn[k] = 20;
       } else if (k === 'dep') {
@@ -3990,6 +4113,95 @@ void main() {
   o = vec4(uCol * glow, glow);
 }`;
 
+
+// Satellite underlay: shaded-relief desert imagery from a baked DEM (R height, G lakebed, B mountain, A rock tone)
+// plus procedural detail that sharpens as you zoom in. Rendered once per view change into its own target.
+const SAT_FS = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o;
+uniform sampler2D uDem; uniform vec4 uView; uniform vec2 uRes; uniform float uExt; uniform float uN; uniform int uMode;
+uint ih(uvec2 q) { uint h = q.x * 1597334677u ^ q.y * 3812015801u; h *= 0x9E3779B9u; h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; return h; }
+float h21(vec2 c) { return float(ih(uvec2(ivec2(c) + 65536))) * (1.0 / 4294967295.0); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1, 0)), u.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), u.x), u.y); }
+const mat2 R = mat2(0.8, -0.6, 0.6, 0.8);
+vec4 dem(vec2 w) { vec2 uv = (w / (2.0 * uExt) + 0.5) * uN + 0.5; vec2 i = floor(uv), f = fract(uv); f = f * f * (3.0 - 2.0 * f); return texture(uDem, (i + f - 0.5) / uN); }
+// ridged detail, octaves fade out once they are smaller than a pixel
+float detail(vec2 w, float px) {
+  float s = 0.0, a = 0.5, fr = 2.6, wt = 1.0;
+  for (int k = 0; k < 7; k++) { float n = 1.0 - abs(vn(w * fr) * 2.0 - 1.0); n = n * n * wt; wt = clamp(n * 1.8, 0.0, 1.0);
+    s += a * n * clamp(1.6 - px * fr * 2.5, 0.0, 1.0); fr *= 2.11; a *= 0.5; w = R * w + 3.7; }
+  return s;
+}
+// fine relief on top of the DEM (ft)
+float Hn(vec2 w, float px, vec4 d) {
+  float m = d.b;
+  float flt = (vn(w * 3.0) + 0.5 * vn(w * 7.0 + 3.0) - 0.75) * 18.0 * clamp(1.5 - px * 10.0, 0.0, 1.0);
+  return (detail(w, px) - 0.32) * 1500.0 * m * m + flt * (1.0 - d.g) * (1.0 - m);
+}
+float Hd(vec2 w) { return dem(w).r * 7000.0; }
+void main() {
+  vec2 w = uView.xy + (vUV * uRes - uRes * 0.5) / uView.z;
+  float px = 1.0 / uView.z;               // nm per pixel
+  vec4 d = dem(w);
+  float h0 = d.r * 7000.0 + 3000.0;
+  // DEM slope over half a texel (keeps half-float steps out of the shading), fine relief over ~a pixel
+  float E = max(uExt / uN, px), e = max(px * 1.2, 0.006);
+  vec2 gd = vec2(Hd(w + vec2(E, 0.0)) - Hd(w - vec2(E, 0.0)), Hd(w + vec2(0.0, E)) - Hd(w - vec2(0.0, E))) / (2.0 * E);
+  float n0 = Hn(w, px, d);
+  vec2 gn = vec2(Hn(w + vec2(e, 0.0), px, dem(w + vec2(e, 0.0))) - n0, Hn(w + vec2(0.0, e), px, dem(w + vec2(0.0, e))) - n0) / e;
+  h0 += n0;
+  vec2 g = (gd + gn) / 6076.0 * 1.6;      // slope, mildly exaggerated
+  vec3 n = normalize(vec3(-g, 1.0));
+  float slope = 1.0 - n.z;
+  float lake = d.g, mtn = d.b, tone = d.a;
+  float fine = clamp(1.5 - px * 60.0, 0.0, 1.0);   // detail visible below ~1/60 nm per px
+  float vfine = clamp(1.5 - px * 250.0, 0.0, 1.0);
+  // ground colour: sand and bajada, regional tint, washes, desert pavement
+  float reg = vn(w * 0.18 + 11.0), reg2 = vn(w * 0.7 - 4.0);
+  vec3 sand = mix(vec3(0.76, 0.70, 0.60), vec3(0.68, 0.63, 0.54), reg);
+  vec3 c = mix(sand, vec3(0.60, 0.55, 0.47), smoothstep(4700.0, 5800.0, h0) * 0.8);
+  c *= 0.93 + 0.14 * reg2;
+  // washes: streaks running down the regional slope (alluvial fans), braided by noise
+  vec2 gc = vec2(dem(w + vec2(0.25, 0.0)).r - dem(w - vec2(0.25, 0.0)).r, dem(w + vec2(0.0, 0.25)).r - dem(w - vec2(0.0, 0.25)).r);
+  float gl = length(gc);
+  vec2 dn = gl > 1e-5 ? gc / gl : vec2(1.0, 0.0);
+  float across = dot(w, vec2(-dn.y, dn.x)), downs = dot(w, dn);
+  float ph = across * 7.0 + vn(vec2(downs * 1.5, across * 2.0)) * 2.5 + vn(w * 0.8) * 4.0;
+  float wl = abs(fract(ph) - 0.5);
+  float washes = smoothstep(0.06, 0.0, wl) * smoothstep(0.0008, 0.004, gl) * (1.0 - mtn) * (1.0 - lake) * smoothstep(0.35, 0.6, vn(vec2(downs * 2.0, across * 7.0)));
+  c = mix(c, vec3(0.86, 0.80, 0.68), washes * 0.55);
+  float pav = smoothstep(0.55, 0.75, vn(w * 9.0 + 2.0)) * (1.0 - mtn) * fine;
+  c = mix(c, vec3(0.50, 0.44, 0.38), pav * 0.25);
+  // rock: dark volcanic tuff/basalt through grey-brown to pale limestone
+  vec3 rock = mix(vec3(0.33, 0.28, 0.25), vec3(0.67, 0.64, 0.58), tone);
+  rock = mix(rock, rock * vec3(1.08, 0.92, 0.82), smoothstep(0.4, 0.8, vn(w * 2.3 + 7.0)) * 0.6);
+  float rk = smoothstep(0.12, 0.55, mtn + slope * 1.4);
+  c = mix(c, rock * (0.85 + 0.3 * vn(w * 14.0)), rk);
+  // pinyon-juniper woodland high on the ranges, creosote on the flats
+  float veg = smoothstep(6400.0, 7600.0, h0) * smoothstep(0.42, 0.7, vn(w * 40.0));
+  c = mix(c, vec3(0.22, 0.24, 0.17), veg * mix(0.35, 0.75, fine));
+  float cre = smoothstep(0.78, 0.9, vn(w * 160.0)) * (1.0 - mtn) * (1.0 - lake) * vfine;
+  c = mix(c, vec3(0.38, 0.38, 0.27), cre * 0.6);
+  // playa: bright clay with salt patches, tyre tracks and a polygonal crack network up close
+  vec3 playa = vec3(0.90, 0.88, 0.83) * (0.93 + 0.07 * vn(w * 6.0)) - vec3(0.06, 0.06, 0.05) * smoothstep(0.5, 0.8, vn(w * 1.4 + 5.0));
+  vec2 gq = w * 260.0; vec2 gi = floor(gq); float md = 9.0, md2 = 9.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { vec2 cc = gi + vec2(i, j); vec2 pp = cc + vec2(h21(cc), h21(cc + 17.0)); float dd = length(gq - pp); if (dd < md) { md2 = md; md = dd; } else if (dd < md2) md2 = dd; }
+  playa *= 1.0 - smoothstep(0.08, 0.0, md2 - md) * 0.18 * vfine;
+  c = mix(c, playa, smoothstep(0.1, 0.7, lake));
+  c = mix(c, c * vec3(0.92, 0.9, 0.86), smoothstep(0.7, 0.1, lake) * smoothstep(0.0, 0.1, lake));  // damp shoreline
+  // light: sun from the north-west, sky fill, a little atmospheric haze
+  vec3 sun = normalize(vec3(-0.55, 0.5, 0.67));
+  float dif = max(dot(n, sun), 0.0);
+  float sh = 0.42 + 0.78 * dif;
+  c *= sh;
+  c = mix(c, vec3(0.75, 0.75, 0.75), 0.06);
+  if (uMode == 0) { float l = dot(c, vec3(0.3, 0.59, 0.11)); o = vec4(min(vec3(0.16, 0.95, 0.38) * l * 0.3, vec3(0.17)), 1.0); }
+  else o = vec4(pow(c, vec3(1.05)) * 0.58, 1.0);
+}`;
+const BLIT_FS = `#version 300 es
+precision mediump float; in vec2 vUV; out vec4 o; uniform sampler2D uTex;
+void main() { o = texture(uTex, vUV); }`;
+
 function makePrograms(gl) {
   return {
     line: compile(gl, LINE_VS, LINE_FS),
@@ -3999,6 +4211,8 @@ function makePrograms(gl) {
     blur: compile(gl, FS_VS, BLUR_FS),
     composite: compile(gl, FS_VS, COMPOSITE_FS),
     sweep: compile(gl, FS_VS, SWEEP_FS),
+    sat: compile(gl, FS_VS, SAT_FS),
+    blit: compile(gl, FS_VS, BLIT_FS),
   };
 }
 
@@ -4157,6 +4371,182 @@ class Labels {
 
 return { Labels };
 });
+__def("js/data/groom.js", function () {
+// Terrain model for the Groom Lake (Area 51) map: a procedural DEM built from the real ranges around the base
+// (Groom Range / Bald Mountain, Jumbled Hills, Tikaboo, Papoose, Belted, Halfpint, Desert Range), two dry lakebeds
+// and the alluvial fans between them. Used by the radar's satellite underlay (baked into a texture) and by the
+// tower view's terrain. Positions are polar [brg, nm] from the ARP, converted to cartesian nm (x east, y north).
+const { hdgVec } = __m("js/core/geo.js");
+const P = ([b, d]) => { const [ux, uy] = hdgVec(b); return [ux * d, uy * d]; };
+
+// Ridge crest polylines: peak height ft, half-width nm, tone 0 dark volcanic .. 1 pale limestone / quartzite.
+const RIDGES = [
+  { name: 'GROOM', pts: [[350, 9], [5, 11], [16, 13.5], [25, 18], [28, 26], [22, 36], [18, 48]], h: 9300, w: 3.0, tone: 0.75 },
+  { name: 'JUMBLED', pts: [[42, 4.6], [58, 4.7], [72, 5.0], [85, 5.6], [100, 6.4], [116, 8.2]], h: 6900, w: 1.0, tone: 0.35 },
+  { name: 'TIKABOO', pts: [[55, 17], [66, 19], [74, 22], [86, 28], [94, 40], [96, 52]], h: 7900, w: 2.4, tone: 0.55 },
+  { name: 'PAPOOSE', pts: [[124, 10.5], [140, 12], [160, 13], [178, 15], [195, 16.5]], h: 7100, w: 2.0, tone: 0.65 },
+  { name: 'BELTED', pts: [[318, 30], [305, 22], [295, 17], [284, 14], [270, 15.5], [256, 21]], h: 9300, w: 2.8, tone: 0.15 },
+  { name: 'HALFPINT', pts: [[206, 11], [220, 9.6], [236, 11.5]], h: 6300, w: 1.4, tone: 0.3 },
+  { name: 'DESERT', pts: [[148, 30], [160, 35], [170, 41], [178, 50]], h: 8500, w: 3.6, tone: 0.8 },
+  { name: 'SPOTTED', pts: [[196, 24], [206, 28], [214, 34]], h: 6600, w: 2.0, tone: 0.45 },
+  { name: 'PAHUTE', pts: [[262, 30], [272, 36], [284, 40]], h: 7400, w: 5.0, tone: 0.1 },
+  { name: 'WORTHINGTON', pts: [[30, 38], [38, 46], [42, 56]], h: 8000, w: 3.0, tone: 0.6 },
+  { name: 'PINTWATER', pts: [[128, 44], [134, 52], [138, 60]], h: 7500, w: 2.6, tone: 0.7 },
+].map(r => ({ ...r, xy: r.pts.map(P) }));
+
+// Dry lakes: centre, semi-axes (nm), rotation (deg), floor ft.
+const LAKES = [
+  { c: P([14, 3.2]), a: 1.45, b: 2.05, rot: 12, h: 4409 },     // Groom Lake
+  { c: P([188, 8.5]), a: 0.9, b: 1.25, rot: -20, h: 4369 },    // Papoose Lake (S-4)
+  { c: P([221, 16]), a: 1.6, b: 2.6, rot: 5, h: 3920 },        // Yucca Lake
+  { c: P([192, 43]), a: 2.2, b: 1.5, rot: 70, h: 3080 },       // Frenchman Flat
+];
+// Broad valley floors: [centre, radius nm, floor ft] blended under everything.
+const BASINS = [
+  { c: P([20, 4]), r: 9, h: 4430 }, { c: P([60, 13]), r: 8, h: 4750 }, { c: P([225, 17]), r: 10, h: 3980 },
+  { c: P([350, 22]), r: 10, h: 4900 }, { c: P([195, 40]), r: 12, h: 3150 }, { c: P([110, 26]), r: 9, h: 4850 },
+];
+
+// ---------- noise ----------
+function ihash(x, y, s) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vn(x, y, s) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  let fx = x - ix, fy = y - iy; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+  const a = ihash(ix, iy, s), b = ihash(ix + 1, iy, s), c = ihash(ix, iy + 1, s), d = ihash(ix + 1, iy + 1, s);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+function fbm(x, y, oct, s) {
+  let v = 0, a = 0.5, n = 0;
+  for (let i = 0; i < oct; i++) { v += a * vn(x, y, s + i * 31); n += a; const t = x; x = x * 1.66 - y * 1.2 + 5.3; y = t * 1.2 + y * 1.66 - 2.9; a *= 0.5; }
+  return v / n;
+}
+// ridged multifractal: sharp crests, branching spurs
+function ridged(x, y, oct, s) {
+  let v = 0, a = 0.5, n = 0, w = 1;
+  for (let i = 0; i < oct; i++) {
+    let r = 1 - Math.abs(vn(x, y, s + i * 13) * 2 - 1); r *= r * w; w = Math.min(1, r * 1.8);
+    v += a * r; n += a; const t = x; x = x * 1.7 - y * 1.1 + 2.1; y = t * 1.1 + y * 1.7 + 7.7; a *= 0.52;
+  }
+  return v / n;
+}
+function segInfo(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1e-9;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2));
+  return [Math.hypot(px - ax - dx * t, py - ay - dy * t), t];
+}
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+// Full sample: { h ft, lake 0..1, mtn 0..1, tone 0..1 }
+function groomSample(x, y) {
+  // valley floor: regional slope plus broad basins
+  let floor = 4700 + (fbm(x * 0.05 + 7, y * 0.05 - 3, 3, 1) - 0.5) * 900;
+  let bw = 0, bh = 0;
+  for (const b of BASINS) { const d = Math.hypot(x - b.c[0], y - b.c[1]) / b.r; const w = Math.exp(-d * d * 2); bw += w; bh += w * b.h; }
+  if (bw > 0) floor = floor + (bh / bw - floor) * Math.min(1, bw);
+  // ranges: max-blend of ridge profiles, crest height varying along the ridge, with ridged detail on the flanks
+  let m = 0, tone = 0.5, tw = 0, fan = 0;
+  const warpX = x + (fbm(x * 0.22, y * 0.22, 4, 5) - 0.5) * 4.2, warpY = y + (fbm(x * 0.22 + 9, y * 0.22 - 4, 4, 6) - 0.5) * 4.2;
+  for (let k = 0; k < RIDGES.length; k++) {
+    const r = RIDGES[k];
+    let best = 1e9, along = 0, acc = 0;
+    for (let i = 0; i < r.xy.length - 1; i++) {
+      const [ax, ay] = r.xy[i], [bx, by] = r.xy[i + 1];
+      const [d, t] = segInfo(warpX, warpY, ax, ay, bx, by), L = Math.hypot(bx - ax, by - ay);
+      if (d < best) { best = d; along = acc + t * L; }
+      acc += L;
+    }
+    if (best > r.w * 5) continue;
+    const crest = 0.62 + 0.38 * fbm(along * 0.35, k * 3.7, 3, 11 + k);     // peaks and saddles along the crest
+    const end = smooth(0, 2.5, along) * smooth(acc, acc - 2.5, along);   // ridges taper at their ends
+    const q = best / (r.w * (0.55 + 0.9 * fbm(along * 0.28 + k * 5.1, 1.3, 3, 61 + k)));
+    const prof = 1 / Math.pow(1 + q * q * 1.4, 1.6);
+    const rel = (r.h - floor) * crest * (0.45 + 0.55 * end);
+    const v = rel * prof;
+    if (v > m) m = v;
+    fan = Math.max(fan, rel * 0.11 * Math.exp(-best / (r.w * 2.4)));
+    const w = Math.exp(-q * q * 0.6); tw += w; tone += w * (r.tone - 0.5);
+  }
+  tone = tw > 0 ? 0.5 + (tone - 0.5) / Math.max(1, tw) : 0.5;
+  // scattered low ranges and buttes away from the base
+  const away = smooth(8, 12, Math.hypot(x, y));
+  const lowMask = smooth(0.56, 0.7, fbm(x * 0.09 + 17, y * 0.09 - 5, 4, 71)) * away;
+  const low = lowMask * (ridged(x * 0.45 - 6, y * 0.45 + 2, 5, 77) * 1700);
+  m = Math.max(m, low * 0.9);
+  // rugged flanks: ridged noise scaled by local relief, small rolling hills everywhere else
+  const rough = (ridged(x * 0.9 + 3, y * 0.9 - 1, 5, 21) - 0.45) * m * 0.75;
+  const mtn = Math.min(1, m / 1800);
+  const hills = (fbm(x * 0.6 - 2, y * 0.6 + 8, 4, 33) - 0.5) * 200 * (1 - mtn);
+  let h = floor + fan + m + rough + hills;
+  // lakebeds: dead flat, with a soft shoreline
+  let lake = 0;
+  for (const L of LAKES) {
+    const c = Math.cos(L.rot * Math.PI / 180), s = Math.sin(L.rot * Math.PI / 180);
+    const dx = x - L.c[0], dy = y - L.c[1], u = (dx * c - dy * s) / L.a, v = (dx * s + dy * c) / L.b;
+    const e = Math.hypot(u, v) + (fbm(x * 2.2, y * 2.2, 3, 41) - 0.5) * 0.28;
+    const l = smooth(1.0, 0.86, e);
+    if (l > lake) lake = l;
+    const f = smooth(2.4, 0.95, e);
+    if (f > 0) h = h + (Math.min(h, L.h + (e - 0.95) * 140) - h) * f;
+    if (l > 0) h = h + (L.h - h) * l;
+  }
+  return { h, lake, mtn, tone };
+}
+const groomHeight = (x, y) => groomSample(x, y).h;
+
+// Bake an RGBA float texture covering ±ext nm: R (h-3000)/7000, G lake, B mountain factor, A rock tone.
+function bakeGroom(N, ext) {
+  const out = new Float32Array(N * N * 4);
+  for (let j = 0; j < N; j++) {
+    const y = -ext + (j + 0.5) / N * 2 * ext;
+    for (let i = 0; i < N; i++) {
+      const x = -ext + (i + 0.5) / N * 2 * ext;
+      const s = groomSample(x, y), o = (j * N + i) * 4;
+      out[o] = (s.h - 3000) / 7000; out[o + 1] = s.lake; out[o + 2] = s.mtn; out[o + 3] = s.tone;
+    }
+  }
+  return out;
+}
+
+// ---------- base layout (cartesian nm) for the radar's satellite map ----------
+// Runway frame of 14L/32R: a along the runway (towards 14L's landing direction, 143°), o across (+ = south-west side).
+const U = hdgVec(143), N = hdgVec(233);
+const F = (a, o) => [U[0] * a + N[0] * o, U[1] * a + N[1] * o];
+const rect = (a0, a1, o0, o1) => [F(a0, o0), F(a1, o0), F(a1, o1), F(a0, o1)];
+const GROOM_BASE = {
+  // paved areas: [poly, kind] kind: 'apron' | 'twy' | 'roof' | 'roofW' | 'lakeRwy'
+  pads: [
+    [rect(-1.02, 1.02, 0.105, 0.125), 'twy'],
+    [rect(-0.62, 0.48, 0.17, 0.34), 'apron'],
+    [rect(-0.95, -0.62, 0.15, 0.24), 'apron'],
+    [rect(0.48, 0.62, 0.16, 0.86), 'twy'],
+    [rect(-1.0, -0.96, 0.0, 0.15), 'twy'], [rect(0.96, 1.0, 0.0, 0.15), 'twy'], [rect(-0.02, 0.02, 0.0, 0.17), 'twy'],
+    ...[-0.58, -0.47, -0.36, -0.25, -0.14, -0.03, 0.08, 0.19, 0.3, 0.41].map((a, i) => [rect(a, a + (i % 3 === 1 ? 0.085 : 0.07), 0.35, 0.42), i % 4 === 2 ? 'roofW' : 'roof']),
+    ...[-0.9, -0.82, -0.74].map(a => [rect(a, a + 0.06, 0.26, 0.31), 'roof']),
+    ...Array.from({ length: 14 }, (_, i) => [rect(-0.95 + (i % 7) * 0.075, -0.95 + (i % 7) * 0.075 + 0.05, 0.5 + (i / 7 | 0) * 0.09, 0.56 + (i / 7 | 0) * 0.09), i % 5 === 0 ? 'roofW' : 'roof']),
+    ...Array.from({ length: 8 }, (_, i) => [rect(-0.35 + i * 0.07, -0.35 + i * 0.07 + 0.045, 0.72, 0.8), 'roof']),
+  ],
+  // the historic lakebed runways (14R/32L and the crosswind strips) painted on Groom Lake
+  lakeRwy: [[P([352, 1.6]), P([25, 5.6])], [P([2, 2.2]), P([36, 4.0])], [P([358, 3.6]), P([30, 3.2])]],
+  roads: [
+    // Groom Lake Road: out of the base north-east, over Groom Pass, down Tikaboo Valley to Highway 375
+    { w: 1.6, pts: [F(-0.4, 0.85), F(-0.9, 0.9), P([300, 1.1]), P([340, 1.0]), P([30, 1.4]), P([55, 2.6]), P([58, 4.0]), P([52, 6.4]), P([50, 8.5]), P([54, 11]), P([60, 14]), P([62, 18]), P([58, 23]), P([52, 30])] },
+    // Highway 375 (Extraterrestrial Highway) through Tikaboo Valley and Rachel
+    { w: 1.8, pts: [P([10, 40]), P([18, 31]), P([30, 27]), P([42, 26]), P([52, 30]), P([66, 32]), P([82, 36]), P([92, 46])] },
+    // south to S-4 / Papoose Lake
+    { w: 1.3, pts: [F(0.5, 0.86), P([200, 1.6]), P([196, 3.5]), P([192, 5.6]), P([189, 7.2])] },
+    // perimeter / lake road
+    { w: 1.0, pts: [P([300, 1.1]), P([330, 2.4]), P([352, 4.6]), P([10, 5.8]), P([28, 5.2]), P([36, 3.3]), P([30, 1.4])] },
+    // west to Yucca Flat over the Halfpint Range
+    { w: 1.3, pts: [P([240, 1.0]), P([236, 4]), P([228, 8]), P([224, 12]), P([221, 18]), P([218, 24])] },
+  ],
+};
+
+return { groomSample, groomHeight, bakeGroom, GROOM_BASE };
+});
 __def("js/render/radar.js", function () {
 // Radar scope renderer. WebGL2 draws the map, sweep, targets, trails and vectors into an HDR scene target,
 // then bloom + scanlines + noise are composited to screen. Text (map labels, data blocks) goes on a 2D overlay.
@@ -4165,6 +4555,10 @@ const { makePrograms, Target, LineBatch, SymbolBatch, TriBatch, fullscreen, SHAP
 const { triangulate, hdgVec, norm360, bearing, dist } = __m("js/core/geo.js");
 const { SWEEP, SIM_DT } = __m("js/sim/world.js");
 const { Labels } = __m("js/render/labels.js");
+const { bakeGroom, GROOM_BASE } = __m("js/data/groom.js");
+const DEM_BAKERS = { groom: bakeGroom };
+const DEM_N = 1024, DEM_EXT = 64; // texels, half-extent nm
+
 const TAU = Math.PI * 2;
 
 const PALETTES = {
@@ -4207,6 +4601,7 @@ class Radar {
     this.scene = new Target(gl, 2, 2, this.float);
     this.b1 = new Target(gl, 2, 2, this.float); this.b1b = new Target(gl, 2, 2, this.float);
     this.b2 = new Target(gl, 2, 2, this.float); this.b2b = new Target(gl, 2, 2, this.float);
+    this.satT = new Target(gl, 2, 2, false); this.satKey = ''; this.demId = null; this.demTex = null;
     this.paint = new Map(); // phosphor: id -> { x, y, t } position when the beam last swept the target
     this.prevAng = null;
     this.style = 'phosphor';
@@ -4227,7 +4622,7 @@ class Radar {
     this.w = w; this.h = h; this.dpr = dpr;
     for (const c of [this.canvas, this.overlay]) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     const W = this.canvas.width, H = this.canvas.height;
-    this.scene.resize(W, H);
+    this.scene.resize(W, H); this.satT.resize(W, H); this.satKey = '';
     this.b1.resize(W / 2, H / 2); this.b1b.resize(W / 2, H / 2);
     this.b2.resize(W / 8, H / 8); this.b2b.resize(W / 8, H / 8);
     this.setRange(keepRange);
@@ -4249,12 +4644,13 @@ class Radar {
 
   // ---------- static map ----------
   buildMap(ap, s) {
-    const key = [ap.id, this.style, s.rangeRings, s.showMva, s.showAirways, s.showSidStar, s.showTerrain, ap.runways.map(r => r.closed).join()].join('|');
+    const key = [ap.id, this.style, s.rangeRings, s.showMva, s.showAirways, s.showSidStar, s.showTerrain, this.satOn(ap, s), ap.runways.map(r => r.closed).join()].join('|');
     if (key === this.mapKey) return;
     this.mapKey = key;
     const P = this.pal, { tri, lines, syms } = this.map;
     tri.clear(); lines.clear(); syms.clear();
     for (const poly of ap.land) tri.polygon(poly, triangulate(poly), P.land);
+    if (this.satOn(ap, s) && ap.raw.dem === 'groom') this.satVectors();
     for (const r of ap.restricted) tri.polygon(r.poly, triangulate(r.poly), P.restrFill);
     if (s.showTerrain) for (const t of ap.terrain) lines.poly(t.line, P.terrain, 1, 6);
     if (s.showMva) for (const m of ap.mva) lines.poly(m.poly, P.mva, 1, 0, true);
@@ -4314,6 +4710,53 @@ class Radar {
     syms.add(ap.tower.x, ap.tower.y, 6, SHAPE.FSQUARE, P.dim);
   }
 
+  satOn(ap, s) { return !!(ap.raw && ap.raw.satellite && ap.raw.dem && s.satellite); }
+
+  // Base, roads and the old lakebed runways, drawn crisp over the satellite underlay.
+  satVectors() {
+    const { tri, lines } = this.map, phos = this.style === 'phosphor';
+    const tone = { apron: 0.4, twy: 0.33, roof: 0.52, roofW: 0.64 };
+    for (const [poly, kind] of GROOM_BASE.pads) {
+      const c = tone[kind];
+      tri.polygon(poly, [0, 1, 2, 0, 2, 3], phos ? [0.05 * c, 0.3 * c, 0.12 * c, 1] : [c, c, c * 0.97, 1]);
+    }
+    const lr = phos ? [0.05, 0.2, 0.08, 0.6] : [0.62, 0.6, 0.55, 0.45];
+    for (const [a, b] of GROOM_BASE.lakeRwy) lines.seg(a[0], a[1], b[0], b[1], lr, 3);
+    const rc = phos ? [0.05, 0.24, 0.1, 0.8] : [0.27, 0.25, 0.22, 0.85];
+    for (const r of GROOM_BASE.roads) lines.poly(r.pts, rc, r.w);
+  }
+
+  ensureDem(id) {
+    if (this.demId === id) return;
+    const gl = this.gl, data = DEM_BAKERS[id](DEM_N, DEM_EXT);
+    if (!this.demTex) this.demTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.demTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, DEM_N, DEM_N, 0, gl.RGBA, gl.FLOAT, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.demId = id; this.satKey = '';
+  }
+
+  // Satellite underlay: re-rendered into its own target only when the view changes, then copied in each frame.
+  drawSat(ap, v, W, H) {
+    const gl = this.gl;
+    this.ensureDem(ap.raw.dem);
+    const key = [v.cx, v.cy, v.scale, W, H, this.style, this.demId].join('|');
+    if (key !== this.satKey) {
+      this.satKey = key;
+      const p = this.progs.sat; gl.useProgram(p.p); this.satT.bind(); gl.disable(gl.BLEND);
+      bindTex(gl, 0, this.demTex, p.u.uDem);
+      gl.uniform4f(p.u.uView, v.cx, v.cy, v.scale, 0); gl.uniform2f(p.u.uRes, W, H);
+      gl.uniform1f(p.u.uExt, DEM_EXT); gl.uniform1f(p.u.uN, DEM_N); gl.uniform1i(p.u.uMode, this.style === 'phosphor' ? 0 : 1);
+      fullscreen(gl);
+      this.scene.bind(); gl.enable(gl.BLEND);
+    }
+    const b = this.progs.blit; gl.useProgram(b.p); bindTex(gl, 0, this.satT.tex, b.u.uTex);
+    gl.disable(gl.BLEND); fullscreen(gl); gl.enable(gl.BLEND);
+  }
+
   // ---------- frame ----------
   render(f) {
     const { world, settings: s } = f;
@@ -4358,7 +4801,9 @@ class Radar {
       if (a.emergency || al === 2) col = blink || !a.emergency ? P.alert : P.warn;
       else if (al === 1) col = P.warn;
       if (sel) col = P.sel;
-      const ca = [col[0], col[1], col[2], (col[3] ?? 1) * glow * (stealth ? 0.32 : 1)];
+      // the saucer's return flickers and drops out between plots
+      const ufo = a.perf.ufo ? (hash(a.id, Math.floor(tNow * 6)) < 0.3 ? 0.12 : 0.65 + 0.35 * Math.sin(tNow * 17 + a.id)) : 1;
+      const ca = [col[0], col[1], col[2], (col[3] ?? 1) * glow * (stealth ? 0.32 : 1) * ufo];
       // trail (one plot per sweep)
       const nTrail = s.trails;
       const hist = a.history;
@@ -4433,6 +4878,7 @@ class Radar {
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.scene.bind();
     gl.clearColor(P.bg[0], P.bg[1], P.bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    if (this.satOn(ap, s)) this.drawSat(ap, v, W, H);
     this.map.tri.draw(v, W, H);
     if (phos) {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
@@ -4497,6 +4943,7 @@ class Radar {
       if (hit) {
         // stealth: the primary return is faint and sometimes missed altogether
         if (a.perf.stealth && this.paint.has(a.id) && !jump && hash(a.id, Math.floor(tNow / SWEEP)) < 0.35) continue;
+        if (a.perf.ufo && this.paint.has(a.id) && !jump && hash(a.id + 7, Math.floor(tNow / SWEEP)) < 0.4) continue;
         this.paint.set(a.id, { x: ix, y: iy, t: tNow });
       }
     }
@@ -4797,6 +5244,62 @@ function dart({ delta = 0.42 } = {}) {
   return m.done();
 }
 
+// triangle with its normal turned away from point o (for closed, roughly convex shapes)
+function outTri(m, o, a, b, c, col, mat) {
+  const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+  const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+  const d = (a[0] + b[0] + c[0]) / 3 - o[0], e = (a[1] + b[1] + c[1]) / 3 - o[1], f = (a[2] + b[2] + c[2]) / 3 - o[2];
+  if (n[0] * d + n[1] * e + n[2] * f < 0) m.tri(a, c, b, col, mat); else m.tri(a, b, c, col, mat);
+}
+
+// TR-3B: flat equilateral triangle with bevelled edges, a raised spine and a light pod under each corner.
+function triangleCraft() {
+  const m = new MeshBuilder();
+  const C = LIV, o = [0, 0, 0.02];
+  const cn = [[0, -0.6], [0.5, 0.27], [-0.5, 0.27]];           // nose, right, left (span 1)
+  const ring = (k, y) => cn.map(([x, z]) => [x * k, y, z * k + 0.02 * (1 - k)]);
+  const top = ring(0.82, 0.035), edge = ring(1, 0), bot = ring(0.86, -0.025), hub = [0, 0.075, 0.0], keel = [0, -0.04, 0.02];
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3;
+    outTri(m, o, hub, top[i], top[j], C, 1);
+    outTri(m, o, top[i], edge[i], edge[j], C, 1); outTri(m, o, top[i], edge[j], top[j], C, 1);
+    outTri(m, o, bot[i], edge[j], edge[i], C, 1); outTri(m, o, bot[i], bot[j], edge[j], C, 1);
+    outTri(m, o, keel, bot[j], bot[i], DARK, 0);
+    // corner pods
+    const [x, z] = cn[i];
+    m.cyl(x * 0.8, z * 0.8 + 0.004, -0.045, -0.02, 0.045, 0.05, 10, [0.85, 0.85, 0.8], 0);
+  }
+  // central "plasma ring" under the hull and a small canopy at the nose
+  m.cyl(0, 0.02, -0.055, -0.035, 0.11, 0.13, 16, [0.7, 0.25, 0.12], 0);
+  m.quad([-0.03, 0.05, -0.32], [0.03, 0.05, -0.32], [0.045, 0.06, -0.24], [-0.045, 0.06, -0.24], GLASS, 2);
+  return m.done();
+}
+
+// Lazar's "Sport Model": a lathe-turned disc with a domed top, a row of portholes and a flat underside.
+function saucer() {
+  const m = new MeshBuilder();
+  const prof = [[0, -0.11], [0.3, -0.105], [0.42, -0.06], [0.5, 0], [0.44, 0.045], [0.3, 0.08], [0.2, 0.1], [0.19, 0.16], [0.12, 0.21], [0, 0.225]];
+  const seg = 28, o = [0, 0.03, 0];
+  for (let k = 0; k < prof.length - 1; k++) {
+    const [ra, ya] = prof[k], [rb, yb] = prof[k + 1];
+    const col = k === 6 ? GLASS : k < 2 ? [0.5, 0.52, 0.55] : LIV, mat = k === 6 ? 2 : k < 2 ? 0 : 1;
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
+      const p = (a, r, y) => [Math.cos(a) * r, y, Math.sin(a) * r];
+      const A = p(a0, ra, ya), B = p(a1, ra, ya), Cc = p(a1, rb, yb), D = p(a0, rb, yb);
+      if (ra > 0) outTri(m, o, A, B, Cc, col, mat);
+      if (rb > 0) outTri(m, o, A, Cc, D, col, mat);
+    }
+  }
+  // portholes around the upper hull and the propulsion ring underneath
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), r = 0.392, w = 0.022;
+    m.quad([c * r - s * w, 0.05, s * r + c * w], [c * r + s * w, 0.05, s * r - c * w], [c * (r - 0.03) + s * w, 0.07, s * (r - 0.03) - c * w], [c * (r - 0.03) - s * w, 0.07, s * (r - 0.03) + c * w], GLASS, 2);
+  }
+  m.cyl(0, 0, -0.118, -0.108, 0.16, 0.18, seg, [0.25, 0.26, 0.3], 0);
+  return m.done();
+}
+
 // Landing gear: nose leg + two main bogies, normalised to wingspan 1 for a mid-size airliner.
 function gear() {
   const m = new MeshBuilder();
@@ -4877,7 +5380,7 @@ function jetBridge() {
   return m.done();
 }
 
-return { MeshBuilder, airliner, turboprop, fighter, straightWing, flyingWing, dart, gear, unitBox, house, hangar, tree, tank, pole, windsock, radarAntenna, vehicle, jetBridge };
+return { MeshBuilder, airliner, turboprop, fighter, straightWing, flyingWing, dart, triangleCraft, saucer, gear, unitBox, house, hangar, tree, tank, pole, windsock, radarAntenna, vehicle, jetBridge };
 });
 __def("js/render/towerScene.js", function () {
 // Procedural tower-view scene for an airport: terrain, airfield layout (runway markings, taxiways, aprons, stands,
@@ -4886,6 +5389,7 @@ __def("js/render/towerScene.js", function () {
 // Units: positions in nm (x east, y north), heights and layout dimensions in ft. GL space is [x, h/FT_PER_NM, -y].
 const { RNG, hashString } = __m("js/core/rng.js");
 const { DEG, FT_PER_NM, hdgVec, clamp, lerp, pointInPoly } = __m("js/core/geo.js");
+const { groomSample, GROOM_BASE } = __m("js/data/groom.js");
 const FT = 1 / FT_PER_NM;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -4934,8 +5438,12 @@ const AC_GEOM = {
   A10: { mesh: 'A10', len: 0.93, span: 17.5 }, U2: { mesh: 'U2', len: 0.61, span: 31.4 }, B2: { mesh: 'B2', len: 0.4, span: 52.4 },
   F117: { mesh: 'DART', len: 1.5, span: 13.2, zs: 0.74 }, SR71: { mesh: 'DART', len: 1.9, span: 16.9, zs: 0.94 },
   CONC: { mesh: 'DART', len: 2.4, span: 25.6, zs: 1.17 }, X15: { mesh: 'DART', len: 2.2, span: 6.8, zs: 1.1 },
+  F16: { mesh: 'FTR', len: 1.5, span: 9.96 }, F15E: { mesh: 'FTR', len: 1.47, span: 13.05 }, F22: { mesh: 'FTR', len: 1.4, span: 13.56 },
+  F35A: { mesh: 'FTR', len: 1.47, span: 10.7 }, T38: { mesh: 'FTR', len: 1.8, span: 7.7, zs: 1.2 },
+  KC35: { mesh: 'K135', len: 1.04, span: 39.9 }, C17: { mesh: 'C17', len: 0.97, span: 51.8 }, C130: { mesh: 'C130', len: 0.74, span: 40.4 },
+  MQ9: { mesh: 'U2', len: 0.55, span: 20.1 }, TR3B: { mesh: 'TRI', len: 1.1, span: 60 }, UFO: { mesh: 'SAUCER', len: 1, span: 12.2 },
 };
-const CLS_DEFAULT = { GA: 'C172', TP: 'DH8D', RJ: 'E190', NB: 'A320', WB: 'B789', MIL: 'EUFI' };
+const CLS_DEFAULT = { GA: 'C172', TP: 'DH8D', RJ: 'E190', NB: 'A320', WB: 'B789', MIL: 'EUFI', FJ: 'F16', HV: 'C17', UA: 'MQ9' };
 function geomFor(type, cls) { return AC_GEOM[type] || AC_GEOM[CLS_DEFAULT[cls] || 'A320']; }
 
 // Livery: [tail/engine colour, body colour] by callsign prefix or special type.
@@ -4953,6 +5461,10 @@ const SPECIAL_LIV = {
   U2: [[0.08, 0.08, 0.09], [0.08, 0.08, 0.09]], B2: [[0.22, 0.23, 0.25], [0.22, 0.23, 0.25]], EUFI: [[0.5, 0.53, 0.56], [0.5, 0.53, 0.56]],
   F35: [[0.42, 0.44, 0.46], [0.42, 0.44, 0.46]], SU57: [[0.45, 0.5, 0.55], [0.45, 0.5, 0.55]], A10: [[0.36, 0.4, 0.36], [0.36, 0.4, 0.36]],
   CONC: [[0.1, 0.14, 0.35], [0.96, 0.96, 0.97]], A225: [[0.2, 0.35, 0.7], [0.95, 0.95, 0.96]],
+  F16: [[0.52, 0.55, 0.58], [0.52, 0.55, 0.58]], F15E: [[0.32, 0.34, 0.36], [0.32, 0.34, 0.36]], F22: [[0.5, 0.53, 0.56], [0.5, 0.53, 0.56]],
+  F35A: [[0.4, 0.42, 0.44], [0.4, 0.42, 0.44]], T38: [[0.12, 0.18, 0.42], [0.94, 0.95, 0.96]], KC35: [[0.52, 0.55, 0.58], [0.55, 0.57, 0.6]],
+  C17: [[0.38, 0.41, 0.43], [0.42, 0.45, 0.47]], C130: [[0.34, 0.37, 0.36], [0.36, 0.39, 0.38]], MQ9: [[0.6, 0.62, 0.64], [0.6, 0.62, 0.64]],
+  TR3B: [[0.08, 0.08, 0.09], [0.08, 0.08, 0.09]], UFO: [[0.74, 0.76, 0.8], [0.74, 0.76, 0.8]],
 };
 function liveryFor(callsign, type) {
   if (SPECIAL_LIV[type]) return SPECIAL_LIV[type];
@@ -4966,6 +5478,8 @@ function liveryFor(callsign, type) {
 const STAND_W = { J: 285, H: 230, M: 140 };
 const STAND_TYPES = { J: ['A388', 'B77W'], H: ['B789', 'A333', 'B77W', 'B789'], M: ['A320', 'B738', 'A321', 'E190', 'A320', 'B738', 'DH8D', 'AT76', 'CRJ9'] };
 const STAND_PLAN = { NMR: ['J', 'H', 'H', 'H', ...Array(14).fill('M')], CVL: ['H', ...Array(18).fill('M')], PAR: ['H', 'H', ...Array(16).fill('M')] };
+const MIL_STANDS = { J: ['C17'], H: ['C17', 'KC35'], M: ['F16', 'F15E', 'F22', 'F35A', 'T38', 'F16', 'F15E'] };
+const MIL_GREY = [[0.5, 0.53, 0.56], [0.52, 0.55, 0.58]];
 const AIRLINES = ['BAW', 'EZY', 'RYR', 'LOG', 'EXS', 'TOM', 'DLH', 'KLM', 'AFR', 'EIN', 'UAE', 'VIR', 'BEE', 'TCX'];
 
 function buildScene(ap) {
@@ -4978,12 +5492,16 @@ function buildScene(ap) {
   const sd = tT0 >= 0 ? 1 : -1;           // tower / terminal side of the main runway
   // The apron is centred on the charted tower position; the cab itself stands at the end of the apron about
   // 1150 ft off the main centreline, so the controller looks down onto the runway rather than over the terminal.
-  const plan = STAND_PLAN[ap.id] || ['H', ...Array(12).fill('M')];
+  const plan = STAND_PLAN[ap.id] || (ap.raw && ap.raw.desert ? ['H', 'H', ...Array(12).fill('M')] : ['H', ...Array(12).fill('M')]);
   const A = plan.reduce((q, c) => q + STAND_W[c], 0) + 200;
   const s0 = clamp(tS0 - A / 2, -F0.L / 2 + 400, F0.L / 2 - 400 - A), s1 = s0 + A;
   const tS = s1 + 300 < F0.L / 2 - 300 ? s1 + 300 : s0 - 300, tT = sd * 1150;
   const [TWX, TWY] = F0.P(tS, tT);
   const fs = -sd;                         // far side
+  // desert bases (Groom Lake): real terrain from the shared height model, no towns, fields or woodland
+  const desert = !!(ap.raw && ap.raw.desert);
+  const SAMPLERS = { groom: groomSample };
+  const demAt = desert && ap.raw.dem ? SAMPLERS[ap.raw.dem] : null;
 
   // ---------- airfield footprint ----------
   // Each runway owns a rectangle in its frame; the main runway's extends further on the terminal side.
@@ -5038,9 +5556,13 @@ function buildScene(ap) {
   const tan3 = Math.tan(3 * DEG);
   const endList = Object.values(ap.ends);
   const heightAt = (x, y) => {
-    const b = baseAt(x, y);
-    const amp = 0.25 * Math.max(0, b - elev) + 80;
-    let h = b + amp * (fbm(x * 0.55 + 3.1, y * 0.55 - 1.7, 5, seed) - 0.5) * 2.2;
+    let h;
+    if (demAt) h = demAt(x, y).h;
+    else {
+      const b = baseAt(x, y);
+      const amp = 0.25 * Math.max(0, b - elev) + 80;
+      h = b + amp * (fbm(x * 0.55 + 3.1, y * 0.55 - 1.7, 5, seed) - 0.5) * 2.2;
+    }
     if (hasLand) {
       const land = inLand(x, y), dc = coastDist(x, y);
       if (!land) return -40 - Math.min(dc, 2) * 50;
@@ -5067,7 +5589,7 @@ function buildScene(ap) {
     const [ox, oy] = hdgVec(e.hdg + 180), dx = x - e.thrX, dy = y - e.thrY, along = dx * ox + dy * oy;
     return along > -1 && along < 12 && Math.abs(dx * oy - dy * ox) < 1.6;
   });
-  const nTowns = rng.int(3, 5);
+  const nTowns = desert ? 0 : rng.int(3, 5);
   for (let tries = 0; tries < 400 && towns.length < nTowns; tries++) {
     const b = rng.range(0, 360), d = rng.range(2.5, 14);
     const [x, y] = [Math.sin(b * DEG) * d + TWX, Math.cos(b * DEG) * d + TWY];
@@ -5085,6 +5607,7 @@ function buildScene(ap) {
   };
   const afMask = (x, y, m) => smooth(m + 0.2, m, rectDist(x, y));
   const forestAt = (x, y) => {
+    if (desert) return 0;
     let f = smooth(0.56, 0.66, fbm(x * 0.9 + 31.7, y * 0.9 - 12.1, 4, seed + 5));
     if (f <= 0) return 0;
     f *= 1 - afMask(x, y, 0.2);
@@ -5106,6 +5629,11 @@ function buildScene(ap) {
     const h = heightAt(x, y), v = k * NS + j;
     TH[v] = h; if (h < 0) sea = true;
     TP[v * 3] = x; TP[v * 3 + 1] = h * FT; TP[v * 3 + 2] = -y;
+    if (desert) { // x playa, z rock tone (see the terrain shader's desert branch)
+      const g = demAt ? demAt(x, y) : { lake: 0, tone: 0.5 };
+      TM[v * 4] = g.lake; TM[v * 4 + 1] = 0; TM[v * 4 + 2] = g.tone; TM[v * 4 + 3] = afMask(x, y, 0.02);
+      continue;
+    }
     const near = r < 18;
     TM[v * 4] = near ? forestAt(x, y) : smooth(0.56, 0.66, fbm(x * 0.9 + 31.7, y * 0.9 - 12.1, 3, seed + 5)) * (h > 0 ? 1 : 0);
     TM[v * 4 + 1] = near ? urbanAt(x, y) : 0;
@@ -5287,15 +5815,20 @@ function buildScene(ap) {
   band(5, F0, s0 - 150, sd * 1200, s1 + 150, sd * 1200, 10, 4, 1.2, 0, elev + 0.4);   // taxilane centreline
   // terminal: airside pier and landside hall
   const tc = (s0 + s1) / 2;
-  { const [a, b] = F0.P(tc, sd * 1710); put('OFFICE', a, b, elev, F0.rw.hdg, 220, 48, A, [0.55, 0.65, 0.75]); }
-  { const [a, b] = F0.P(tc, sd * 1790); put('OFFICE', a, b, elev, F0.rw.hdg, 60, 68, A * 0.7, [0.6, 0.68, 0.74]); }
+  if (desert) { // a line of big hangars instead of a terminal, offices behind
+    for (let s = s0 + 130; s <= s1 - 100; s += 270) { const [a, b] = F0.P(s, sd * 1760); put('HANGAR', a, b, elev, F0.hdg(0, -sd), 250, 80, 260); }
+    { const [a, b] = F0.P(tc, sd * 2000); put('OFFICE', a, b, elev, F0.rw.hdg, 120, 36, A * 0.5, [0.7, 0.66, 0.58]); }
+  } else {
+    { const [a, b] = F0.P(tc, sd * 1710); put('OFFICE', a, b, elev, F0.rw.hdg, 220, 48, A, [0.55, 0.65, 0.75]); }
+    { const [a, b] = F0.P(tc, sd * 1790); put('OFFICE', a, b, elev, F0.rw.hdg, 60, 68, A * 0.7, [0.6, 0.68, 0.74]); }
+  }
   for (let s = s0; s <= s1 + 1; s += A / 4) { const [a, b] = F0.P(s, sd * 1710); light(a, b, elev + 52, 3, RED, 0.9, 0, -1, 0, 1); }
   block(...F0.P(tc, sd * 1710), A / 2);
   const stands = [];
   let cur = s0 + 100;
   for (const cls of plan) {
     const w = STAND_W[cls], s = cur + w / 2; cur += w;
-    const type = rng.pick(STAND_TYPES[cls]);
+    const type = rng.pick((desert ? MIL_STANDS : STAND_TYPES)[cls]);
     const g = AC_GEOM[type], span = g.span * 3.28084, len = span * g.len;
     const [cx, cy] = F0.P(s, sd * (1560 - len / 2));
     const hdg = F0.hdg(0, sd);
@@ -5307,13 +5840,13 @@ function buildScene(ap) {
     const jet = !['DH8D', 'AT76'].includes(type);
     if (occupied) {
       const op = rng.pick(AIRLINES);
-      putAc(type, cx, cy, hdg, LIVERY[op]);
+      putAc(type, cx, cy, hdg, desert ? SPECIAL_LIV[type] || MIL_GREY : LIVERY[op]);
       // ground equipment: tug, baggage carts, GPU
       const [ex, ey] = F0.P(s - sd * (span * 0.32), sd * (1560 - len * 0.55));
       put('BOX', ex, ey, elev, F0.rw.hdg, 6, 5, 12, [0.95, 0.7, 0.1]);
       for (let q = 0; q < 3; q++) { const [bx, by] = F0.P(s - sd * (span * 0.32 + 14), sd * (1560 - len * 0.55 - q * 12)); put('BOX', bx, by, elev, F0.rw.hdg + 90, 5, 4, 9, [0.5, 0.52, 0.55]); }
     }
-    if (jet && cls !== 'J') {
+    if (jet && cls !== 'J' && !desert) {
       const door = F0.P(s + sd * (len * 0.06 + 6), sd * (1560 - len * 0.12));
       const base = F0.P(s + sd * (len * 0.06 + 6) + sd * 45, sd * 1600);
       const dx = (occupied ? door[0] : lerp(base[0], door[0], 0.45)) - base[0], dy = (occupied ? door[1] : lerp(base[1], door[1], 0.45)) - base[1];
@@ -5348,7 +5881,7 @@ function buildScene(ap) {
     }
   }
   // hotels, offices and a multi-storey car park behind the forecourt
-  for (let s = s0, n = 0; s < s1 && n < 7; s += rng.range(380, 620), n++) {
+  for (let s = s0, n = 0; s < s1 && n < 7 && !desert; s += rng.range(380, 620), n++) {
     const t = sd * rng.range(2700, 3300);
     if (towerNear(s, t)) continue;
     const [a, b] = F0.P(s, t), tall = rng.range(40, n === 2 ? 140 : 90);
@@ -5371,6 +5904,7 @@ function buildScene(ap) {
     road(2, pts, 30, 6, 30);
     roadsOut.push(pts);
   }
+  if (desert && ap.raw.dem === 'groom') for (const r of GROOM_BASE.roads) { road(2, r.pts, 26, 6, 26); roadsOut.push(r.pts); }
 
   // ---------- far side: hangars, cargo, fire station, fuel farm, radar ----------
   const farAt = (s, t, rFt) => { const p = F0.P(s, t); if (!clearOf(p[0], p[1], rFt * 0.3)) return null; return p; };
@@ -5382,8 +5916,9 @@ function buildScene(ap) {
       for (const s of [sA + 300, sA + 1500]) band(3, F0, s, 0, s, fs * 760, 60, 2, 60);
       for (let q = 0; q < 3; q++) { const p = F0.P(sA + 250 + q * 420, fs * 1420); put('HANGAR', p[0], p[1], elev, F0.hdg(0, -fs), 240, 75, 200); light(p[0], p[1], elev + 106, 3, RED, 1, 0, -1, 0, 1); }
       const sh = F0.P(sA + 1550, fs * 1420); put('BOX', sh[0], sh[1], elev, F0.rw.hdg, 220, 42, 500, [0.66, 0.68, 0.7]);
-      for (let q = 0; q < 6; q++) { const p = F0.P(sA + 120 + q * 60, fs * 900); putAc(rng.pick(['C172', 'PA28']), p[0], p[1], F0.hdg(0, -fs), [[rng.pick([0.7, 0.1, 0.2]), 0.12, 0.1], [0.96, 0.96, 0.96]]); }
-      const cg = F0.P(sA + 1250, fs * 1050); putAc('A333', cg[0], cg[1], F0.hdg(0, -fs), [[0.45, 0.32, 0.12], [0.95, 0.95, 0.95]]);
+      for (let q = 0; q < 6; q++) { const p = F0.P(sA + 120 + q * 60, fs * 900); if (desert) { const ty = rng.pick(['T38', 'F16', 'F15E']); putAc(ty, p[0], p[1], F0.hdg(0, -fs), SPECIAL_LIV[ty]); } else putAc(rng.pick(['C172', 'PA28']), p[0], p[1], F0.hdg(0, -fs), [[rng.pick([0.7, 0.1, 0.2]), 0.12, 0.1], [0.96, 0.96, 0.96]]); }
+      const cg = F0.P(sA + 1250, fs * 1050);
+      if (desert) putAc('C17', cg[0], cg[1], F0.hdg(0, -fs), SPECIAL_LIV.C17); else putAc('A333', cg[0], cg[1], F0.hdg(0, -fs), [[0.45, 0.32, 0.12], [0.95, 0.95, 0.95]]);
       block(...F0.P(sA + 900, fs * 1100), 1000);
       pools.length < 16 && pools.push([...(p => [p[0], -p[1]])(F0.P(sA + 900, fs * 1050)), 450 * FT]);
       light(...F0.P(sA + 900, fs * 1250), elev + 70, 16, FLOOD, 1, 0, -1, 0, 1);
@@ -5435,7 +5970,7 @@ function buildScene(ap) {
     }
   }
   // farms
-  for (let n = 0, tries = 0; n < 16 && tries < 200; tries++) {
+  for (let n = 0, tries = 0; n < 16 && tries < 200 && !desert; tries++) {
     const b = rng.range(0, 360), d = rng.range(1.5, 7);
     const x = tx0 + Math.sin(b * DEG) * d, y = ty0 + Math.cos(b * DEG) * d;
     if (!clearOf(x, y, 300) || urbanAt(x, y) > 0 || forestAt(x, y) > 0.2 || (hasLand && !inLand(x, y))) continue;
@@ -5453,6 +5988,15 @@ function buildScene(ap) {
     const x = tx0 + (gx + (rng.next() - 0.5) * step) * FT, y = ty0 + (gy + (rng.next() - 0.5) * step) * FT;
     const r = Math.hypot(x - tx0, y - ty0);
     if (r * FT_PER_NM > treeR) continue;
+    if (desert) { // sagebrush and creosote on the flats, juniper higher up; none on the playa
+      const h = meshHeightAt(x, y), hi = h > elev + 900;
+      if (!rng.chance(hi ? 0.3 : 0.05) || !clearOf(x, y, 60) || (demAt && demAt(x, y).lake > 0.05)) continue;
+      const tall = hi ? rng.range(14, 26) : rng.range(3, 7);
+      put(hi ? 'TREE_C' : 'TREE_D', x, y, h - (hi ? 2 : 0.5), rng.range(0, 360), tall * (hi ? 0.8 : 1.4), tall, tall * (hi ? 0.8 : 1.4),
+        hi ? [0.16, 0.2, 0.12] : [0.34 + rng.next() * 0.06, 0.36 + rng.next() * 0.05, 0.26]);
+      if (++trees >= 8000) break;
+      continue;
+    }
     const f = forestAt(x, y);
     const p = f > 0 ? f * 0.85 : 0.006;
     if (!rng.chance(p)) continue;
@@ -5491,7 +6035,7 @@ function buildScene(ap) {
   for (const [k, v] of Object.entries(inst)) instances[k] = { data: new Float32Array([...v.near, ...v.far]), near: v.near.length / 17, count: (v.near.length + v.far.length) / 17 };
 
   return {
-    elev, sd, frames, F0, tS, tT, heightAt, meshHeightAt, sea, hasLand, gridRot, fieldRot, towns,
+    elev, sd, frames, F0, tS, tT, heightAt, desert, meshHeightAt, sea, hasLand, gridRot, fieldRot, towns,
     terrain, terrainIdx: new Uint16Array(idx), pave, rwTex, instances, lights: new Float32Array(lights),
     holds, papi, stands, taxi, pools, vehLoop, carPaths, cars, vehicles, radar, loc, endIndex,
     windsocks,
@@ -5555,7 +6099,7 @@ __def("js/render/tower.js", function () {
 // streaks follow the precip code. Drag to look, wheel to zoom, the bar at the top picks a view preset.
 // Labels and the cab frame go on the shared 2D overlay.
 const { compile } = __m("js/render/gl.js");
-const { MeshBuilder, airliner, turboprop, fighter, straightWing, flyingWing, dart, gear, unitBox, house, hangar, tree, tank, pole, windsock, radarAntenna, vehicle, jetBridge } = __m("js/render/towerMeshes.js");
+const { MeshBuilder, airliner, turboprop, fighter, straightWing, flyingWing, dart, gear, unitBox, house, hangar, tree, tank, pole, windsock, radarAntenna, vehicle, jetBridge, triangleCraft, saucer } = __m("js/render/towerMeshes.js");
 const { buildScene, runwayTexture, geomFor, liveryFor } = __m("js/render/towerScene.js");
 const { DEG, hdgVec, clamp, lerp, FT_PER_NM } = __m("js/core/geo.js");
 const FT = 1 / FT_PER_NM;
@@ -5647,7 +6191,7 @@ void main() { vW = aP; vN = aN; vM = aM; gl_Position = uVP * vec4(aP, 1.0); }`;
 const TERRAIN_FS = `#version 300 es
 precision highp float;
 in vec3 vW; in vec3 vN; in vec4 vM; out vec4 o;
-uniform float uFieldRot, uGridRot, uRwRot;
+uniform float uFieldRot, uGridRot, uRwRot, uDesert;
 ${NOISE}${COMMON}
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
 void main() {
@@ -5672,28 +6216,43 @@ void main() {
   field = mix(field, vec3(0.08, 0.14, 0.06), hedge * clamp(1.0 - efw / 60.0, 0.0, 1.0) * 0.85);
   field = mix(field, vec3(0.30, 0.35, 0.17), clamp(qfw * 3.0 - 0.4, 0.0, 0.8));   // average out far away
   vec3 c = field;
-  // moorland and rock on the high ground
-  c = mix(c, vec3(0.34, 0.30, 0.20) * (0.8 + 0.4 * n1), smoothstep(1150.0, 1700.0, hft + (n1 - 0.5) * 300.0));
-  // woodland
-  vec3 forest = vec3(0.075, 0.14, 0.06) * (0.65 + 0.7 * vn(p / 55.0)) * (0.85 + 0.3 * n1);
-  c = mix(c, forest, smoothstep(0.05, 0.6, vM.x));
-  // towns: grey roofs/gardens with a street grid that matches the house placement
-  vec2 g = rot(-uGridRot) * p;
-  g = vec2(p.x * cos(uGridRot) + p.y * sin(uGridRot), -p.x * sin(uGridRot) + p.y * cos(uGridRot));
-  vec2 gm = abs(mod(g + 200.0, 400.0) - 200.0);
-  float sw = 14.0, gfw = fwidth(g.x) + 1e-3;
-  float street = max(1.0 - smoothstep(sw, sw + gfw, gm.y), 1.0 - smoothstep(sw, sw + gfw, gm.x));
-  vec3 urban = mix(vec3(0.24, 0.30, 0.17), vec3(0.42, 0.41, 0.39), smoothstep(0.35, 0.65, vn(p / 60.0)));
-  urban = mix(urban, vec3(0.2, 0.2, 0.21), street);
-  float u = smoothstep(0.02, 0.4, vM.y);
-  c = mix(c, urban, u);
-  // mown airfield grass
-  vec2 ra = rot(uRwRot) * p;
-  float stripe = step(0.5, fract(ra.x / 40.0)); float sfw = fwidth(ra.x / 40.0);
-  vec3 af = vec3(0.24, 0.35, 0.14) * (0.95 + 0.05 * mix(stripe, 0.5, clamp(sfw * 3.0, 0.0, 1.0))) * (0.88 + 0.16 * n2 + 0.08 * n3);
-  c = mix(c, af, vM.w);
-  // beaches and sea bed
-  c = mix(c, vec3(0.62, 0.56, 0.42) * (0.9 + 0.2 * n2), vM.z * smoothstep(40.0, 8.0, hft));
+  float u = 0.0, street = 0.0; vec2 g = p;
+  if (uDesert > 0.5) {
+    // Mojave basin and range: pale alluvium speckled with creosote and sage, rock on the ranges, white playa.
+    // vM: x playa, z rock tone, w airfield.
+    c = vec3(0.62, 0.55, 0.44) * (0.82 + 0.25 * n1 + 0.08 * n2);
+    c = mix(c, vec3(0.50, 0.44, 0.35), smoothstep(0.55, 0.8, vn(p / 900.0)) * 0.5);
+    float sfw2 = clamp(fwidth(p.x) / 12.0, 0.0, 1.0);
+    c = mix(c, vec3(0.31, 0.32, 0.23), mix(smoothstep(0.7, 0.84, vn(p / 16.0)), 0.18, sfw2) * 0.6 * (1.0 - vM.x));
+    vec3 rock = mix(vec3(0.34, 0.29, 0.25), vec3(0.66, 0.63, 0.57), vM.z) * (0.8 + 0.4 * n2);
+    c = mix(c, rock, clamp(smoothstep(0.95, 0.8, n.y) + smoothstep(5400.0, 6800.0, hft + (n1 - 0.5) * 600.0) * 0.6, 0.0, 1.0));
+    c = mix(c, vec3(0.22, 0.24, 0.17), smoothstep(6400.0, 7600.0, hft) * smoothstep(0.45, 0.7, vn(p / 120.0)) * 0.6);
+    vec3 playa = vec3(0.86, 0.84, 0.79) * (0.95 + 0.05 * n1) - vec3(0.05) * smoothstep(0.5, 0.8, vn(p / 2500.0));
+    c = mix(c, playa, smoothstep(0.1, 0.6, vM.x));
+    c = mix(c, vec3(0.68, 0.63, 0.54) * (0.9 + 0.1 * n2), vM.w * 0.7);
+  } else {
+    // moorland and rock on the high ground
+    c = mix(c, vec3(0.34, 0.30, 0.20) * (0.8 + 0.4 * n1), smoothstep(1150.0, 1700.0, hft + (n1 - 0.5) * 300.0));
+    // woodland
+    vec3 forest = vec3(0.075, 0.14, 0.06) * (0.65 + 0.7 * vn(p / 55.0)) * (0.85 + 0.3 * n1);
+    c = mix(c, forest, smoothstep(0.05, 0.6, vM.x));
+    // towns: grey roofs/gardens with a street grid that matches the house placement
+    g = vec2(p.x * cos(uGridRot) + p.y * sin(uGridRot), -p.x * sin(uGridRot) + p.y * cos(uGridRot));
+    vec2 gm = abs(mod(g + 200.0, 400.0) - 200.0);
+    float sw = 14.0, gfw = fwidth(g.x) + 1e-3;
+    street = max(1.0 - smoothstep(sw, sw + gfw, gm.y), 1.0 - smoothstep(sw, sw + gfw, gm.x));
+    vec3 urban = mix(vec3(0.24, 0.30, 0.17), vec3(0.42, 0.41, 0.39), smoothstep(0.35, 0.65, vn(p / 60.0)));
+    urban = mix(urban, vec3(0.2, 0.2, 0.21), street);
+    u = smoothstep(0.02, 0.4, vM.y);
+    c = mix(c, urban, u);
+    // mown airfield grass
+    vec2 ra = rot(uRwRot) * p;
+    float stripe = step(0.5, fract(ra.x / 40.0)); float sfw = fwidth(ra.x / 40.0);
+    vec3 af = vec3(0.24, 0.35, 0.14) * (0.95 + 0.05 * mix(stripe, 0.5, clamp(sfw * 3.0, 0.0, 1.0))) * (0.88 + 0.16 * n2 + 0.08 * n3);
+    c = mix(c, af, vM.w);
+    // beaches and sea bed
+    c = mix(c, vec3(0.62, 0.56, 0.42) * (0.9 + 0.2 * n2), vM.z * smoothstep(40.0, 8.0, hft));
+  }
   if (hft < 0.0) c = vec3(0.25, 0.27, 0.22);
   // rock on steep slopes
   c = mix(c, vec3(0.36, 0.34, 0.31) * (0.8 + 0.4 * n2), smoothstep(0.86, 0.7, n.y));
@@ -5947,12 +6506,15 @@ function meshLibrary() {
     B752: airliner({ len: 1.24, r: 0.052 }), E190: airliner({ len: 1.26, r: 0.06, engR: 0.042 }), CRJ9: airliner(ttail),
     DH8D: turboprop({ len: 1.15 }), AT76: turboprop({ len: 1.0 }), C172: turboprop({ len: 0.75, ga: true }), PA28: turboprop({ len: 0.68, ga: true }),
     A225: airliner({ len: 0.95, r: 0.065, eng: 4, wide: true, engR: 0.045 }),
+    TRI: triangleCraft(), SAUCER: saucer(),
+    K135: airliner({ len: 1.04, r: 0.05, eng: 4, engR: 0.034 }), C17: airliner({ len: 0.97, r: 0.075, eng: 4, engR: 0.04, ttail: true }),
+    C130: turboprop({ len: 0.74, r: 0.07 }),
     FTR: fighter(), A10: straightWing({ len: 0.93 }), U2: straightWing({ len: 0.61, glider: true }), B2: flyingWing(), DART: dart(),
     GEAR: gear(), BOX: unitBox(1), OFFICE: unitBox(3, [0.3, 0.31, 0.33]), HOUSE: house(), HANGAR: hangar(), TREE_C: tree(true), TREE_D: tree(false),
     TANK: tank(), POLE: pole(), VEH: vehicle(), BRIDGE: jetBridge(), WSOCK: windsock(), RADAR: radarAntenna(),
   };
 }
-const AC_MESHES = new Set(['A388', 'B77W', 'B789', 'A333', 'A320', 'A321', 'B738', 'B752', 'E190', 'CRJ9', 'DH8D', 'AT76', 'C172', 'PA28', 'A225', 'FTR', 'A10', 'U2', 'B2', 'DART']);
+const AC_MESHES = new Set(['A388', 'B77W', 'B789', 'A333', 'A320', 'A321', 'B738', 'B752', 'E190', 'CRJ9', 'DH8D', 'AT76', 'C172', 'PA28', 'A225', 'FTR', 'A10', 'U2', 'B2', 'DART', 'TRI', 'SAUCER', 'K135', 'C17', 'C130']);
 
 // colours for lights
 const C_RED = [1, 0.1, 0.06], C_GRN = [0.15, 1, 0.3], C_WHT = [1, 1, 1], C_LAND = [1, 0.96, 0.85], C_AMB = [1, 0.62, 0.1];
@@ -6299,8 +6861,9 @@ class Tower {
   drawAircraft(type, cls, callsign, st, opt) {
     const g = geomFor(type, cls), liv = liveryFor(callsign, type), span = g.span / 1852;
     const z = span * (g.zs || 1);
-    const ground = opt.ground;
-    const hFt = ground ? this.scene.elev + 0.134 * g.span * 3.28084 : st.hFt;
+    const ground = opt.ground, ufo = g.mesh === 'TRI' || g.mesh === 'SAUCER';
+    let hFt = ground ? this.scene.elev + 0.134 * g.span * 3.28084 : st.hFt;
+    if (ufo) { opt.gear = false; hFt += Math.sin(opt.t * 1.3 + opt.seed * 6) * (g.mesh === 'SAUCER' ? 1.5 : 3); }
     const flags = (opt.minPx ? 1 : 0) | (ground ? 2 : 0);
     this.pushInst(g.mesh, st.x, hFt, st.y, st.hdg, st.pitch || 0, st.bank || 0, opt.sel ? 1 : 0, flags, span, span, z, liv[0], liv[1]);
     if (opt.gear) this.pushInst('GEAR', st.x, hFt, st.y, st.hdg, st.pitch || 0, st.bank || 0, 0, flags, span, span, z, [1, 1, 1], [1, 1, 1]);
@@ -6310,6 +6873,22 @@ class Tower {
     const P = (along, across, up) => [st.x + (fx * along + rx * across) * FT, st.y + (fy * along + ry * across) * FT, hFt + up];
     const L = (p, size, c, a, kind = 0, param = 0, clsL = 2) => this.light(p[0], p[1], p[2], size, c, a, kind, -1, param, clsL);
     const t = opt.t, ph = opt.phase;
+    if (ufo) {
+      const sF = g.span * 3.28084;
+      if (g.mesh === 'TRI') {
+        // a white light under each corner and a slow orange-red pulse at the centre
+        for (const [al, ac] of [[0.48, 0], [-0.22, 0.4], [-0.22, -0.4]]) L(P(al * sF, ac * sF, -0.045 * sF), 9, [1, 0.97, 0.9], 1.6, 0, 0, 2);
+        L(P(-0.02 * sF, 0, -0.06 * sF), 16, [1, 0.35, 0.12], 1.1 + 0.5 * Math.sin(t * 2.2 + opt.seed * 9), 0, 0, 2);
+      } else {
+        // chasing rim lights and a blue-white glow underneath
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2, on = ((t * 3 + opt.seed * 8 - i) % 8 + 8) % 8 < 2;
+          L(P(Math.cos(a) * 0.5 * sF, Math.sin(a) * 0.5 * sF, 0), on ? 6 : 3, i % 2 ? [0.4, 1, 0.6] : [0.5, 0.7, 1], on ? 1.8 : 0.5, 0, 0, 2);
+        }
+        L(P(0, 0, -0.12 * sF), 12, [0.65, 0.8, 1], 1.4 + 0.3 * Math.sin(t * 5), 0, 0, 2);
+      }
+      return { span, hFt };
+    }
     L(P(0, -tipFt, 0), 3.5, C_RED, 0.9); L(P(0, tipFt, 0), 3.5, C_GRN, 0.9); L(P(-lenFt, 0, 2), 3, C_WHT, 0.7);
     if (!opt.parked) {
       const k = (t * 1.0 + opt.seed) % 1.2;
@@ -6454,7 +7033,7 @@ class Tower {
     // terrain
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     p = this.p.terrain; gl.useProgram(p.p); common(p);
-    gl.uniform1f(p.u.uFieldRot, S.fieldRot); gl.uniform1f(p.u.uGridRot, S.gridRot); gl.uniform1f(p.u.uRwRot, -S.F0.rw.hdg * DEG);
+    gl.uniform1f(p.u.uFieldRot, S.fieldRot); gl.uniform1f(p.u.uGridRot, S.gridRot); gl.uniform1f(p.u.uRwRot, -S.F0.rw.hdg * DEG); gl.uniform1f(p.u.uDesert, S.desert ? 1 : 0);
     gl.bindVertexArray(this.terrainVao); gl.drawElements(gl.TRIANGLES, this.terrainN, gl.UNSIGNED_SHORT, 0);
     // sea
     if (S.sea) {
@@ -7271,7 +7850,7 @@ const SETTINGS_UI = [
     ['vectorMin', 'Speed vector (min)', 'select', [0, 1, 2, 5]],
     ['trails', 'History dots', 'range', 0, 12, 1],
     ['rangeRings', 'Range rings', 'check'], ['showMva', 'MVA sectors', 'check'], ['showAirways', 'Airways', 'check'],
-    ['showSidStar', 'SID/STAR lines', 'check'], ['showTerrain', 'Terrain & coast', 'check'],
+    ['showSidStar', 'SID/STAR lines', 'check'], ['showTerrain', 'Terrain & coast', 'check'], ['satellite', 'Satellite imagery (Area 51)', 'check'],
     ['uiScale', 'UI scale', 'range', 0.8, 1.6, 0.05, v => Math.round(v * 100) + '%'],
   ]],
   ['Sound', [
