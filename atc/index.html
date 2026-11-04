@@ -2458,8 +2458,9 @@ const BASE_MAX = 26;      // beyond this the downwind is abandoned and the aircr
 const SPACING_BUFFER = 3; // nm added to the minimum spacing when sequencing
 const MAX_COMMITTED = 5;  // arrivals being vectored but not yet established
 const HIST = 12;
-const FL_SPACING = 4.5;    // flawless: spacing buffer, nm
+const FL_SPACING = 3.5;    // flawless: spacing buffer, nm
 const FL_H = 150;          // flawless: prediction horizon, s
+const FL_HL = 480;         // flawless: horizon for the handoff check (until the aircraft is gone from the scope)
 const FL_AREA = 1.5;       // flawless: nm kept clear of active restricted areas
 const FL_LAT0 = 0.8, FL_LAT1 = 1.2; // flawless: lateral buffer on the separation minimum, growing over the horizon
 const FL_TRAJ = new Set(['HDG', 'TURN', 'ALT', 'SPD', 'DCT', 'HOLD', 'ILS', 'RES', 'SN']);
@@ -2467,6 +2468,7 @@ const FL_DELTAS = [0, 10, -10, 20, -20, 30, -30, 40, -40, 50, -50, 60, -60, 75, 
 
 const floor100 = v => Math.floor(v / 100) * 100, ceil100 = v => Math.ceil(v / 100) * 100;
 const ceil1000 = v => Math.ceil(v / 1000 - 1e-6) * 1000, floor1000 = v => Math.floor(v / 1000 + 1e-6) * 1000;
+const round1000 = v => Math.round(v / 1000) * 1000;
 const round5 = h => (Math.round(norm360(h) / 5) * 5) % 360 || 360;
 
 function cmdText(c, ac) {
@@ -2691,7 +2693,7 @@ class Assist {
     const w = this.w, o = this.st(ac);
     if (ac.strip.state !== 'PENDING' || o.contactAt == null) return;
     const waited = w.t - o.contactAt;
-    if (this.ojti('release')) { if (waited > 8 && this.free(ac)) this.issue(ac, [{ t: 'REL' }]); return; }
+    if (this.ojti('release')) { if (waited > 8 && this.free(ac) && (!this.fl || this.flRelOk(ac))) this.issue(ac, [{ t: 'REL' }]); return; }
     if (waited > 40) this.hint(ac, 'rel', [{ t: 'REL' }], 'it is waiting at the holding point for release', 90);
     if (waited > 150) this.failOnce('release', ac, `${ac.callsign} has been waiting over two minutes for release. Release departures with REL.`);
   }
@@ -2874,6 +2876,23 @@ class Assist {
         const L = this.local(f, ac.x, ac.y);
         if (Math.abs(L.s) > 0.4) this.steer(ac, f.c - Math.sign(L.s) * 30, 20);
       }
+      // flawless: a straight-in that can no longer get down to the intercept altitude by the IF (held up by traffic or a
+      // restricted area) is taken off it now and vectored round, rather than going around from 4 nm high
+      if (this.fl && mine && !o.manual.lat && !ac.nordo && !ac.perf.glider && !ac.emergency && ac.app?.state === 'ARMED' && ac.app.viaIF && this.free(ac)) {
+        const dIF = dist(ac.x, ac.y, f.ifPt.x, f.ifPt.y), grad = Math.min(330, 0.8 * ac.descRate() / Math.max(1, ac.tas() / 60));
+        if (dIF > 2 && ac.alt - f.ifAlt > (dIF + 1) * grad) o.flDoomed = true;
+      }
+      if (this.fl && mine && !o.manual.lat && !ac.nordo && !ac.perf.glider && !ac.emergency && ac.app && (ac.app.state === 'ARMED' || (ac.app.state === 'LOC' && ac.distToThr() > 6)) && this.free(ac)) {
+        if (!o.flDoomed && this.w.t - (o.flDoomT ?? -99) >= 10) { o.flDoomT = this.w.t; const T = this.flCurLong(ac); o.flDoomed = /too high|glideslope|glidepath/.test(T.ga || ''); }
+        if (o.flDoomed) {
+          o.flDoomed = false;
+          const L = this.local(f, ac.x, ac.y);
+          o.stage = 'DW'; o.side = Math.sign(L.s) || 1;
+          const [px, py] = this.toWorld(f, Math.max(L.a, 0) + 6, o.side * DW_OFFSET);
+          this.flBreak(ac, round5(ac.wca(bearing(ac.x, ac.y, px, py))));
+          continue;
+        }
+      }
       if (ac.app || ac.nordo) continue;
       if (!mine || o.manual.lat) { this.userVectorHints(ac, f, flow); continue; }
       if (!f.ok) { this.toHold(ac); continue; }
@@ -2899,8 +2918,14 @@ class Assist {
         if (Math.abs(L.s) <= 2.2 || Math.sign(L.s) !== sg) {
           const side = Math.abs(L.s) > 0.4 ? Math.sign(L.s) : sg; // overshot: intercept from the side it is now on
           let ok = this.issue(ac, [{ t: 'HDG', v: round5(ac.wca(f.c - side * 30)) }, { t: 'ILS', rwy: f.end.id }]);
-          if (ok === false) for (const ang of [20, 40, 15]) if ((ok = this.issue(ac, [{ t: 'HDG', v: round5(ac.wca(f.c - side * ang)) }, { t: 'ILS', rwy: f.end.id }]))) break;
+          let high = this._flHigh;
+          if (ok === false) for (const ang of [20, 40, 15]) { if ((ok = this.issue(ac, [{ t: 'HDG', v: round5(ac.wca(f.c - side * ang)) }, { t: 'ILS', rwy: f.end.id }]))) break; high &&= this._flHigh; }
           if (ok !== false) o.stage = 'INT';
+          else if (this.fl && high) { // too high for any intercept: back out onto the downwind to lose height
+            o.stage = 'DW'; o.side = side;
+            const [px, py] = this.toWorld(f, Math.max(L.a, 0) + 6, side * DW_OFFSET);
+            this.flBreak(ac, round5(ac.wca(bearing(ac.x, ac.y, px, py))));
+          }
         } else this.steer(ac, f.c - sg * 90, 20);
       } else if (o.stage === null) o.stage = 'DW'; // committed some other way (go-around)
     }
@@ -2956,13 +2981,24 @@ class Assist {
       }
       if (lead && ac.onFinal && lead.ac.onFinal && !o.manual.spd && !ac.nordo && this.free(ac) && !ac.perf.glider) {
         const gapNow = tm - lead.tm, need = this.minSp(lead.ac, ac);
-        if (gapNow < need - 0.1 && tm > 2.5 && !ac.emergency) { this.issue(ac, [{ t: 'GA' }]); continue; }
+        if (gapNow < need - 0.1 && tm > 2.5 && !ac.emergency) {
+          // flawless: break it off onto a clean heading instead - a go-around flies the missed approach, which can
+          // mean descending to the missed-approach altitude from well above it, through the MVA and the traffic
+          if (this.fl) {
+            const L = this.local(f, ac.x, ac.y);
+            o.stage = 'DW'; o.side = Math.sign(L.s) || 1;
+            const [px, py] = this.toWorld(f, Math.max(L.a, 0) + 6, o.side * DW_OFFSET);
+            this.flBreak(ac, round5(ac.wca(bearing(ac.x, ac.y, px, py))));
+          } else this.issue(ac, [{ t: 'GA' }]);
+          continue;
+        }
         if (gapNow < need + 1 && (ac.clr.spd || ac.ias) > ac.perf.vapp + 2) { o.spdAt = this.w.t; this.issue(ac, [{ t: 'SPD', v: Math.round(ac.perf.vapp) }]); continue; }
       }
-      if (o.manual.spd || ac.nordo || !this.free(ac) || ac.alt > 10000 || ac.emergency || ac.priority) continue; // emergencies keep their speed
+      if (o.manual.spd || ac.nordo || !this.free(ac) || (ac.alt > 10000 && !(this.fl && (ac.app || ['BASE', 'INT', 'DIRECT'].includes(o.stage)))) || ac.emergency || ac.priority) continue; // emergencies keep their speed
       const floor = ac.app && ac.distToThr() < 20 ? ac.perf.vapp + 15 : ac.perf.vmin;
-      const slow = Math.round(Math.max(floor, Math.min(160, ac.maxIas())));
-      const mid = Math.round(Math.max(floor, Math.min(180, ac.maxIas())));
+      // flawless: slow types (a 90 kt drone) are not run at 160 kt down final - they could not shed it by the stable gate
+      const slow = Math.round(Math.max(floor, Math.min(this.fl ? ac.perf.vapp + 25 : 160, 160, ac.maxIas())));
+      const mid = Math.round(Math.max(floor, Math.min(this.fl ? ac.perf.vapp + 60 : 180, 180, ac.maxIas())));
       const tight = lead && tm - lead.tm < this.minSp(lead.ac, ac) + 1.5 + comp;
       const want = tight ? Math.round(floor) : ac.onFinal && tm < 10 ? slow : mid;
       const cur = ac.clr.spd || Math.round(ac.ias);
@@ -3222,10 +3258,71 @@ class Assist {
   }
 
   // flawless: after the handoff the next sector climbs it to its cruise level / puts it back on its route
+  // Release only a departure whose climb-out, from the earliest moment the tower could roll it, is clean: two slow
+  // climbers on the same SID 75 s apart are not separated, and nothing can be done about it once both are airborne.
+  flRelOk(ac) {
+    const w = this.w, o = this.st(ac);
+    if (w.t - (o.flRelT ?? -99) < 4) return o.flRelR;
+    const prev = w.lastDep?.[ac.depRwy];
+    const gap = prev ? (['H', 'J'].includes(prev.wake) && !['H', 'J'].includes(ac.wake) ? 125 : 75) : 0;
+    const t0 = Math.max(w.t + 3, prev ? prev.t + gap : 0);
+    const tmp = Object.assign(Object.create(Object.getPrototypeOf(ac)), ac, { phase: 'LINEUP', luT: t0 - 16 });
+    o.flRelT = w.t;
+    o.flRelR = !this.flCheck(ac, this.flSim(tmp, null, Math.min(FL_HL, t0 - w.t + 200)));
+    return o.flRelR;
+  }
+  // Once handed on, an aircraft can no longer be moved but its conflicts still count until it is well outside the
+  // sector, so the handoff is only given when its whole remaining flight (with the climb or route resumption the
+  // handoff triggers) is clean against everyone else's long-range prediction. If it is not, fix it first.
+  flHoCmds(ac) {
+    if (ac.kind === 'DEP') return [{ t: 'ALT', v: Math.min(ac.perf.ceiling, Math.max(ac.clr.alt, ac.rfl || 24000)) }];
+    return ac.nav.mode !== 'ROUTE' && ac.route.length ? [{ t: 'RES' }] : [];
+  }
   flHoOk(ac) {
-    if (Math.hypot(ac.x, ac.y) > this.w.ap.sectorRadius - 3) return true;
-    const cmds = ac.kind === 'DEP' ? [{ t: 'ALT', v: Math.min(ac.perf.ceiling, Math.max(ac.clr.alt, ac.rfl || 24000)) }] : ac.nav.mode !== 'ROUTE' && ac.route.length ? [{ t: 'RES' }] : null;
-    return !cmds || this.flClean(ac, cmds);
+    const w = this.w, o = this.st(ac), R = w.ap.sectorRadius;
+    if (w.t - (o.flHoT ?? -99) < 4) return o.flHoR;
+    o.flHoT = w.t;
+    const v = this.flHoCheck(ac, this.flHoCmds(ac));
+    o.flHoR = !v || Math.hypot(ac.x, ac.y) > R - 2;
+    if (v && !o.flHoR) this.flHoFix(ac, v);
+    return o.flHoR;
+  }
+  flLong() {
+    const w = this.w;
+    if (this._flL && w.t - this._flL.t < 4) return this._flL.m;
+    const m = new Map();
+    for (const ac of w.aircraft) if (['AIR', 'TAKEOFF', 'LINEUP'].includes(ac.phase)) m.set(ac.id, this.flSim(ac, null, FL_HL));
+    this._flL = { t: w.t, m };
+    return m;
+  }
+  flHoCheck(ac, cmds, swap = null) {
+    let L = this.flLong();
+    if (swap) { L = new Map(L); L.set(swap.id, swap.sim); }
+    const ev = cmds.length ? [this.flSim(ac, cmds, FL_HL), this.flSim(ac, cmds, FL_HL, this.w.t + this.flDelay(ac, true))] : [L.get(ac.id) || this.flSim(ac, null, FL_HL)];
+    let best = null;
+    for (const T of ev) { const v = this.flCheck(ac, T, FL_AREA, L); if (v && (!best || v.t < best.t)) best = v; }
+    return best;
+  }
+  flSpdCands(m) {
+    const out = [], cur = m.clr.spd || Math.round(m.ias), hi = Math.min(m.maxIas(), m.alt < 10000 ? 250 : 999);
+    for (const d of [-20, 20, -40, 40, -60]) { const v = round5(cur + d); if (v >= m.perf.vmin + 10 && v <= hi) out.push({ t: 'SPD', v }); }
+    return out;
+  }
+  flHoFix(ac, v) {
+    const w = this.w, o = this.st(ac);
+    if (w.t - (o.flHoFixAt ?? -99) < 10 || !this.free(ac)) return;
+    o.flHoFixAt = w.t;
+    const ho = this.flHoCmds(ac), cands = this.flSpdCands(ac).map(c => [c]);
+    const lvl = m => [1000, -1000, 2000, -2000].map(d => round1000(m.clr.alt + d)).filter(L => L >= w.ap.elev + 3000 && L <= Math.min(m.perf.ceiling, w.ap.ceiling - 500)).map(L => [{ t: 'ALT', v: L }]);
+    if (ac.kind === 'OVR') cands.push(...lvl(ac));
+    for (const d of [20, -20, 40, -40]) cands.push([{ t: 'HDG', v: round5(ac.hdg + d), dir: d > 0 ? 'R' : 'L' }]);
+    for (const c of cands) if (!this.flHoCheck(ac, [...c, ...ho]) && this.issue(ac, c)) { this._flL = null; return; }
+    // otherwise move the traffic, if we still own it
+    const b = v.b;
+    if (!b || !this.flMovable(b) || b.phase !== 'AIR' || !this.free(b)) return;
+    for (const c of [...this.flSpdCands(b).map(c => [c]), ...lvl(b)]) {
+      if (!this.flHoCheck(ac, ho, { id: b.id, sim: this.flSim(b, c, FL_HL) }) && this.issue(b, c)) { this._flL = null; return; }
+    }
   }
 
   // ---------- flawless skill: trajectory prediction ----------
@@ -3245,7 +3342,23 @@ class Assist {
     this._sw.runwayConfig = w.runwayConfig;
     return this._sw;
   }
-  flDelay(ac) { return this.w.settings.respMax * (ac.special ? 0.7 : 1); }
+  flDelay(ac, lo = false) { return (lo ? this.w.settings.respMin : this.w.settings.respMax) * (ac.special ? 0.7 : 1); }
+  // The pilot's reaction time is random, so judge an instruction at both ends of it: a slow and a quick readback
+  // can fly very different paths (e.g. one captures the localiser, the other turns through it).
+  // An approach clearance is flown out to the threshold (FL_HL), so a go-around for being too high shows up now.
+  flEval(ac, cmds) {
+    const H = cmds.some(c => c.t === 'ILS') || (ac.app && !ac.onFinal && !cmds.some(c => c.cancelApp)) ? FL_HL : FL_H;
+    const a = this.flSim(ac, cmds, H), va = this.flCheck(ac, a);
+    const b = this.flSim(ac, cmds, H, this.w.t + this.flDelay(ac, true)), vb = this.flCheck(ac, b);
+    this._flHigh = /too high/.test((a.ga || '') + (b.ga || ''));
+    return { sim: a, H, v: !va ? vb : !vb ? va : va.t <= vb.t ? va : vb, soft: this.flSoft(a) || this.flSoft(b) };
+  }
+  // What the aircraft does with no new instruction, flown out to the threshold (cached a few seconds).
+  flCurLong(ac) {
+    const o = this.st(ac);
+    if (!o.flCL || this.w.t - o.flCL.t >= 5) o.flCL = { t: this.w.t, sim: this.flSim(ac, null, FL_HL) };
+    return o.flCL.sim;
+  }
   flValid(ac, cmds) { return cmds.filter(c => FL_TRAJ.has(c.t) && !this.w.validate(ac, { ...c })).map(c => ({ ...c })); }
   flSim(ac, cmds = null, H = FL_H, at = null) {
     const w = this.w, sw = this.flWorld(), o = this.st(ac);
@@ -3263,7 +3376,7 @@ class Assist {
       for (const e of ev) if (!e.done && sw.t >= e.at - 1e-9) { e.done = true; c.apply(e.cmds); if (c.app) c.clr.landing = true; }
       if (toAt != null && c.phase === 'LINEUP' && sw.t >= toAt) { c.phase = 'TAKEOFF'; c.ias = 0; }
       if (!(k & 1)) pts.push({ t: k, x: c.x, y: c.y, alt: c.alt, vs: c.vs, fin: !!c.onFinal, air: c.phase === 'AIR', clr: c.clr.alt, ms: c.missedAt });
-      if (c.phase === 'ROLLOUT' || c.phase === 'GONE') break;
+      if (c.phase === 'ROLLOUT' || c.phase === 'GONE' || (H > FL_H && Math.hypot(c.x, c.y) > sw.ap.sectorRadius + 7)) break;
       c.step(1); sw.t += 1;
     }
     return { ac, pts, ga: c._fl.ga, gaT: c._fl.gaT, missT: c._fl.missT, end: c };
@@ -3280,7 +3393,7 @@ class Assist {
     return m;
   }
   // Earliest hard violation on a predicted trajectory: restricted area, MVA, leaving the sector, or a conflict.
-  flCheck(ac, T, margin = FL_AREA) {
+  flCheck(ac, T, margin = FL_AREA, others = this.flT) {
     if (!T) return null;
     const w = this.w, ap = w.ap, s = w.settings, P = T.pts, elev = ap.elev, R = ap.sectorRadius;
     let best = null;
@@ -3301,10 +3414,11 @@ class Assist {
       if (p.vs < -300 && p.clr < mva && p.alt + p.vs / 2 < mvaAt(ap, f.x, f.y) - 100) hit(p.t, 'MSAW');
     }
     const p0 = P[0];
-    for (const [id, Q] of this.flT) {
+    const reach = P.length > 80 ? 90 : 40;
+    for (const [id, Q] of others) {
       if (id === ac.id || !Q.pts.length) continue;
       const q0 = Q.pts[0];
-      if (Math.hypot(p0.x - q0.x, p0.y - q0.y) > 40) continue;
+      if (Math.hypot(p0.x - q0.x, p0.y - q0.y) > reach) continue;
       const n = Math.min(P.length, Q.pts.length);
       for (let k = 0; k < n; k++) {
         const p = P[k], q = Q.pts[k];
@@ -3312,7 +3426,7 @@ class Assist {
         if (!p.air || !q.air || p.alt - elev < 200 || q.alt - elev < 200) continue;
         if (Math.abs(p.alt - q.alt) >= 980) continue;
         if (p.alt - elev < 1500 && q.alt - elev < 1500 && Math.hypot(p.x, p.y) < 5 && Math.hypot(q.x, q.y) < 5) continue;
-        const thr = p.fin && q.fin ? s.sepLateral + 0.2 : s.sepLateral + FL_LAT0 + FL_LAT1 * p.t / FL_H;
+        const thr = p.fin && q.fin ? s.sepLateral + 0.2 : s.sepLateral + FL_LAT0 + FL_LAT1 * Math.min(1, p.t / FL_H);
         if (Math.hypot(p.x - q.x, p.y - q.y) < thr) { hit(p.t, 'CONF', Q.ac); break; }
       }
     }
@@ -3320,16 +3434,15 @@ class Assist {
   }
   flSoft(T) { return T && ((T.ga && !/weather|wind|ILS failure|runway closed/.test(T.ga)) || T.missT != null); }
   // Would this instruction keep the aircraft clean (or at least improve on what it is doing now)?
-  flOk(ac, sim, cur = this.flT.get(ac.id)) {
-    const v = this.flCheck(ac, sim);
-    if (v) { const cv = this.flCheck(ac, cur); if (!cv || v.t < cv.t + 6) return false; }
-    if (this.flSoft(sim) && !this.flSoft(cur)) return false;
+  flOk(ac, e, cur = this.flT.get(ac.id)) {
+    if (e.v) { const cv = this.flCheck(ac, cur); if (!cv || e.v.t < cv.t + 6) return false; }
+    if (e.soft && !this.flSoft(e.H > FL_H ? this.flCurLong(ac) : cur)) return false;
     return true;
   }
   flIssue(ac, cmds, force) {
     const w = this.w, o = this.st(ac);
     const traj = cmds.some(c => FL_TRAJ.has(c.t));
-    if (traj && !force && !this.flOk(ac, this.flSim(ac, cmds))) return false;
+    if (traj && !force && !this.flOk(ac, this.flEval(ac, cmds))) return false;
     const n0 = ac.queue.length;
     w.dispatch(ac, cmds, cmds.map(c => cmdText(c, ac)).join(' '), 'OJTI');
     o.busy = w.t + w.settings.respMax + 1.5;
@@ -3341,7 +3454,7 @@ class Assist {
     }
     return true;
   }
-  flClean(ac, cmds) { return !this.flCheck(ac, this.flSim(ac, cmds)); }
+  flClean(ac, cmds) { return !this.flEval(ac, cmds).v; }
   // Heading nearest to `hdg` whose predicted path is clean (null if none within 150°).
   flSafeHdg(ac, hdg, extra = {}) {
     const cur = ac.nav.mode === 'HDG' ? ac.clr.hdg : null;
@@ -3349,8 +3462,8 @@ class Assist {
       const h = round5(hdg + d);
       if (cur != null && Math.abs(angleDiff(cur, h)) < 3) { if (!this.flCheck(ac, this.flT.get(ac.id))) return { h, cur: true }; continue; }
       const cmds = [{ t: 'HDG', v: h, ...extra }];
-      const sim = this.flSim(ac, cmds);
-      if (!this.flCheck(ac, sim) && !(this.flSoft(sim) && !this.flSoft(this.flT.get(ac.id)))) return { h, cmds };
+      const e = this.flEval(ac, cmds);
+      if (!e.v && !(e.soft && !this.flSoft(e.H > FL_H ? this.flCurLong(ac) : this.flT.get(ac.id)))) return { h, cmds };
     }
     return null;
   }
@@ -3399,8 +3512,8 @@ class Assist {
         const cur = this.flT.get(m.id);
         const cv = this.flCheck(m, cur);
         for (const cand of this.flCands(m)) {
-          const sim = this.flSim(m, cand.cmds);
-          const r = this.flCheck(m, sim);
+          let r = this.flCheck(m, this.flSim(m, cand.cmds));
+          if (!r || !best || r.t > best.sc) r = this.flEval(m, cand.cmds).v;
           const sc = r ? r.t : 1e9;
           if (!best || sc > best.sc) best = { m, cand, sc, cv };
           if (!r) break;
@@ -5820,6 +5933,555 @@ function strut(m, a, b, r, seg = 8, col = COL.METAL) {
 const triCount = mesh => mesh.n / 3;
 
 return { COL, V, triN, surface, sectionPt, loft, lathe, naca, wingPanel, mirrorX, mark, xform, rotX, rotY, rotZ, rotateAbout, wheel, strut, triCount, MeshBuilder };
+});
+__def("js/render/models/PROPS.js", function () {
+// High-detail tower-view scenery props: drop-in replacements for the crude meshes in towerMeshes.js
+// (house, hangar, tree, tank, windsock, radarAntenna, vehicle, jetBridge).
+//
+// Every prop is a UNIT mesh exactly like the old ones: the renderer scales it by per-instance (sx, sy, sz) feet, origin on the
+// ground (y = 0), forward / nose = -z.  To keep round things round and details at real-world size, each prop is modelled in
+// FEET (or tree-heights) for a nominal instance scale S and divided by S at the very end (positions /S, normals * S).
+// Materials follow the in-game shader: 0 plain colour, 1 instance tint x vertex colour, 2 glass, 4 house wall
+// (instance tint, shader paints the windows).  No randomness: only a deterministic sine hash.
+const { MeshBuilder, COL, V, triN, surface, loft, lathe, mark, xform, rotX, rotY, wheel } = __m("js/render/models/kit.js");
+const PI = Math.PI;
+const hash = (a, b = 0, c = 0) => { const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + 1.234) * 43758.5453; return s - Math.floor(s); };
+const sh = (c, k) => [Math.min(1, c[0] * k), Math.min(1, c[1] * k), Math.min(1, c[2] * k)];
+const STEEL = [0.55, 0.57, 0.6], DSTEEL = [0.32, 0.33, 0.36], CONC = [0.62, 0.6, 0.57], BLK = [0.06, 0.06, 0.07];
+const GLASS = COL.GLASS, TRIM = [0.92, 0.92, 0.9], DARK = COL.DARK;
+
+// Divide a model built in feet by its nominal instance scale and return the finished mesh.
+function unit(m, S) {
+  for (let i = 0; i < m.P.length; i += 3) {
+    m.P[i] /= S[0]; m.P[i + 1] /= S[1]; m.P[i + 2] /= S[2];
+    const x = m.N[i] * S[0], y = m.N[i + 1] * S[1], z = m.N[i + 2] * S[2], l = Math.hypot(x, y, z) || 1;
+    m.N[i] = x / l; m.N[i + 1] = y / l; m.N[i + 2] = z / l;
+  }
+  return m.done();
+}
+
+// Quad whose winding is fixed so that its normal agrees with the `out` hint.
+function quadO(m, a, b, c, d, out, col, mat = 0) {
+  const n = V.cross(V.sub(b, a), V.sub(c, a));
+  if (V.dot(n, out) < 0) m.quad(a, d, c, b, col, mat); else m.quad(a, b, c, d, col, mat);
+}
+function triO(m, a, b, c, out, col, mat = 0) {
+  const n = V.cross(V.sub(b, a), V.sub(c, a));
+  if (V.dot(n, out) < 0) m.tri(a, c, b, col, mat); else m.tri(a, b, c, col, mat);
+}
+
+// Tapered round tube from a to b (smooth normals).
+function tube(m, a, b, r0, r1, seg, col, mat = 0, caps = true) {
+  const s0 = mark(m), d = V.sub(b, a), L = Math.hypot(d[0], d[1], d[2]);
+  if (L < 1e-9) return;
+  lathe(m, 0, 0, [[0, r0], [L, r1]], seg, { col, mat, caps });
+  const z = V.norm(d), up = Math.abs(z[1]) < 0.99 ? [0, 1, 0] : [1, 0, 0];
+  const x = V.norm(V.cross(up, z)), y = V.cross(z, x);
+  xform(m, s0, [[x[0], y[0], z[0]], [x[1], y[1], z[1]], [x[2], y[2], z[2]]], a);
+}
+// Vertical lathe: profile [[height above y0, radius], ...] about the vertical axis through (cx, cz).
+function vlathe(m, cx, cz, y0, prof, seg, opts = {}) {
+  const s0 = mark(m);
+  lathe(m, 0, 0, prof, seg, opts);
+  xform(m, s0, rotX(-PI / 2), [cx, y0, cz]);
+}
+// Smooth ellipsoid lump (deterministic radial wobble) centred on c.
+function lump(m, c, rx, ry, rz, nl, ns, seed, wob, colTop, colBot, mat = 1) {
+  const grid = [];
+  for (let k = 0; k <= nl; k++) {
+    const ph = (k / nl) * PI, row = [];
+    for (let j = 0; j < ns; j++) {
+      const th = (j / ns) * 2 * PI, w = k === 0 || k === nl ? 1 : 1 + wob * (hash(seed, k, j) - 0.5) * 2;
+      row.push([c[0] + rx * w * Math.sin(ph) * Math.cos(th), c[1] + ry * w * Math.cos(ph), c[2] + rz * w * Math.sin(ph) * Math.sin(th)]);
+    }
+    grid.push(row);
+  }
+  surface(m, grid, { wrapJ: true, mat, ref: () => c, paint: (i, j) => [sh(colTop, 0.7 + 0.3 * (1 - (i + 0.5) / nl) * (0.9 + 0.2 * hash(seed, i, j + 9))), mat] });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// TREE.  Unit mesh scaled by (0.62 h, h, 0.62 h) in the forest, so it is built in tree-heights with S = [0.62, 1, 0.62].
+// tree(true) = conifer (old TREE_C, 8 stacked drooping skirts), tree(false) = broadleaf (old TREE_D, lumpy crown).
+// ---------------------------------------------------------------------------------------------------------------------
+function tree(conifer = true) {
+  const m = new MeshBuilder(), S = [0.62, 1, 0.62], BARK = [0.3, 0.22, 0.15], BARK2 = [0.22, 0.16, 0.11];
+  if (conifer) {
+    // trunk
+    vlathe(m, 0, 0, 0, [[0, 0.02], [0.03, 0.0125], [0.4, 0.007], [0.86, 0.003], [0.94, 0.0]], 6, { col: BARK, mat: 0, caps: false });
+    const NT = 8;
+    for (let i = 0; i < NT; i++) {
+      const yb = 0.12 + 0.105 * i, h = 0.285 - 0.03 * i, R = 0.272 * (1 - 0.105 * i), ns = 12, tone = 0.86 + 0.14 * hash(i, 3);
+      const grid = [];
+      const row = (f, yf, rf, dy) => Array.from({ length: ns }, (_, j) => {
+        const tip = j % 2 ? 1 : 0.8, w = (0.9 + 0.2 * hash(i, j, 5)) * (f === 2 ? tip : 1), a = (j / ns) * 2 * PI + i * 0.5;
+        return [Math.cos(a) * R * rf * w, yb + h * yf + (f === 2 ? -0.012 * (j % 2) : 0) + dy, Math.sin(a) * R * rf * w];
+      });
+      grid.push(row(0, 1, 0.0, 0.012), row(1, 0.62, 0.5, 0), row(2, 0.1, 1, 0), row(3, 0.0, 0.3, 0.012));
+      surface(m, grid, { wrapJ: true, mat: 1, ref: () => [0, yb + h * 0.5, 0],
+        paint: (r, j) => [sh([1, 1, 1], r === 0 ? 1.0 * tone : r === 1 ? 0.86 * tone * (0.92 + 0.16 * (j % 2)) : 0.42), 1] });
+    }
+  } else {
+    vlathe(m, 0, 0, 0, [[0, 0.022], [0.03, 0.014], [0.3, 0.009], [0.52, 0.006]], 6, { col: BARK, mat: 0, caps: true });
+    // three limbs into the crown
+    for (let k = 0; k < 3; k++) { const a = k * 2.094 + 0.4; tube(m, [0, 0.28, 0], [Math.cos(a) * 0.11, 0.6, Math.sin(a) * 0.11], 0.0065, 0.003, 5, BARK2, 0, false); }
+    const G = [1, 1, 1];
+    lump(m, [0, 0.6, 0], 0.2, 0.17, 0.2, 5, 9, 1, 0.07, G, G);
+    for (let k = 0; k < 5; k++) {
+      const a = k * 1.2566 + 0.3;
+      lump(m, [Math.cos(a) * 0.165, 0.5 + 0.045 * hash(k, 2), Math.sin(a) * 0.165], 0.14, 0.115, 0.14, 4, 8, 10 + k, 0.08, G, G);
+    }
+    lump(m, [0.0, 0.81, 0.0], 0.15, 0.165, 0.15, 4, 8, 20, 0.08, G, G);
+  }
+  return unit(m, S);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// HOUSE.  Old house(): 1 x 0.62 x 1 walls + gable roof (ridge along x) to y = 1.  Modelled in feet for S = [30, 23, 34].
+// Walls are material 4 (instance tint + shader windows on every vertical face), roof is plain brown, trim is white.
+// Front door / porch on -z (the model's forward side), back door + deck on +z so either street side reads correctly.
+// ---------------------------------------------------------------------------------------------------------------------
+function house() {
+  const m = new MeshBuilder(), S = [30, 23, 34];
+  const HX = 15, HZ = 17, WH = 14.26, RH = 23, OV = 1.7, OG = 1.3, SL = (RH - WH) / HZ, YE = WH - SL * OV;
+  const WALL = [0.88, 0.85, 0.78], ROOF = [0.42, 0.22, 0.17], DOOR = [0.26, 0.17, 0.13], BRICK = [0.5, 0.25, 0.19], WOOD = [0.5, 0.39, 0.28];
+  // walls (mat 4) + gable triangles
+  m.box(-HX, HX, 0, WH, -HZ, HZ, WALL, 4);
+  m.tri([HX, WH, HZ], [HX, WH, -HZ], [HX, RH, 0], WALL, 4);
+  m.tri([-HX, WH, -HZ], [-HX, WH, HZ], [-HX, RH, 0], WALL, 4);
+  // foundation plinth
+  m.box(-HX - 0.25, HX + 0.25, 0, 1.3, -HZ - 0.25, HZ + 0.25, CONC, 0);
+  // roof: two shingled slopes, thickness 0.35
+  const NC = 14, roofY = z => WH + (HZ - Math.abs(z)) * SL + 0.35;
+  for (const s of [-1, 1]) {
+    const grid = [];
+    for (let i = 0; i <= NC; i++) {
+      const t = i / NC, z = s * (HZ + OV) * (1 - t) ;
+      grid.push([-HX - OG, -HX / 3, HX / 3, HX + OG].map(x => [x, roofY(z) - (t === 1 ? 0 : 0), z]));
+    }
+    surface(m, grid, { mat: 0, ref: (i, j) => [grid[i][j][0], 5, 0], col: ROOF,
+      paint: (i, j) => [sh(ROOF, (i % 2 ? 0.93 : 1.04) * (0.94 + 0.12 * hash(i, j, s))), 0] });
+    // soffit + fascia
+    quadO(m, [-HX - OG, WH - 0.2, s * HZ], [HX + OG, WH - 0.2, s * HZ], [HX + OG, YE - 0.3, s * (HZ + OV)], [-HX - OG, YE - 0.3, s * (HZ + OV)], [0, -1, 0], sh(TRIM, 0.86));
+    quadO(m, [-HX - OG, YE - 0.35, s * (HZ + OV)], [HX + OG, YE - 0.35, s * (HZ + OV)], [HX + OG, YE + 0.36, s * (HZ + OV)], [-HX - OG, YE + 0.36, s * (HZ + OV)], [0, 0, s], TRIM);
+    // gutter along the eave and downspouts at the corners
+    m.box(-HX - OG, HX + OG, YE - 0.55, YE - 0.3, s * (HZ + OV) - (s > 0 ? 0.25 : -0.05), s * (HZ + OV) + (s > 0 ? 0.05 : -0.25), sh(TRIM, 0.92));
+    for (const x of [-HX + 0.4, HX - 0.4]) m.box(x - 0.2, x + 0.2, 0.3, YE - 0.3, s * (HZ + 0.3) - 0.2, s * (HZ + 0.3) + 0.2, sh(TRIM, 0.95));
+  }
+  // barge boards along both gable edges
+  for (const sx of [-1, 1]) for (const s of [-1, 1]) {
+    const x = sx * (HX + OG), z0 = s * (HZ + OV), top0 = roofY(HZ + OV) - 0.02;
+    const q = [[x, top0 - 0.9, z0], [x, RH + 0.35 - 0.9, 0], [x, RH + 0.35 + 0.0, 0], [x, top0, z0]];
+    quadO(m, q[0], q[1], q[2], q[3], [sx, 0, 0], TRIM); quadO(m, q[0], q[1], q[2], q[3], [-sx, 0, 0], TRIM);
+  }
+  // ridge cap
+  m.box(-HX - OG, HX + OG, RH + 0.3, RH + 0.62, -0.5, 0.5, sh(ROOF, 0.8));
+  // chimney (brick) with cap and flue
+  const CX = 8.2, CZ = -4.2;
+  m.box(CX - 1.3, CX + 1.3, 14.5, RH + 3.6, CZ - 1.1, CZ + 1.1, BRICK);
+  for (let k = 0; k < 7; k++) m.box(CX - 1.34, CX + 1.34, 15 + k * 1.55, 15.1 + k * 1.55, CZ - 1.14, CZ + 1.14, sh(BRICK, 0.7));
+  m.box(CX - 1.55, CX + 1.55, RH + 3.6, RH + 4.0, CZ - 1.35, CZ + 1.35, CONC);
+  tube(m, [CX, RH + 4.0, CZ], [CX, RH + 5.0, CZ], 0.55, 0.5, 8, sh(BRICK, 0.8), 0, true);
+  // roof vents + plumbing stack on the back slope
+  for (const x of [-9, -2]) m.box(x - 0.6, x + 0.6, roofY(8) - 0.2, roofY(8) + 0.9, 7.4, 8.6, [0.2, 0.2, 0.22]);
+  tube(m, [5, roofY(9) - 0.3, 9], [5, roofY(9) + 1.7, 9], 0.3, 0.3, 6, DSTEEL, 0, true);
+  // front door, frame, porch (gabled, wall-tinted gable end), steps
+  const zf = -HZ - 5.5;
+  m.box(-3.9, 3.9, 0, 0.9, zf, -HZ, CONC);                       // porch slab
+  m.box(-2.6, 2.6, 0, 0.45, zf - 0.9, zf, CONC); m.box(-2.9, 2.9, 0, 0.22, zf - 1.7, zf - 0.9, sh(CONC, 0.9));   // steps
+  for (const x of [-3.45, 3.45]) { m.box(x - 0.3, x + 0.3, 0.9, 9.0, zf + 0.1, zf + 0.7, TRIM); m.box(x - 0.45, x + 0.45, 0.9, 1.3, zf, zf + 0.8, sh(TRIM, 0.9)); }
+  m.box(-3.9, 3.9, 8.75, 9.35, zf - 0.1, zf + 0.8, TRIM);       // porch beam
+  const rq = (a, b, c, d, o) => quadO(m, a, b, c, d, o, ROOF), pr = 0.35;
+  rq([-4.4, 9.35, zf - 0.8], [0, 11.8, zf - 0.8], [0, 12.8, -HZ], [-4.4, 10.35, -HZ], [-1, 1, 0]);
+  rq([4.4, 9.35, zf - 0.8], [0, 11.8, zf - 0.8], [0, 12.8, -HZ], [4.4, 10.35, -HZ], [1, 1, 0]);
+  m.tri([-4.0, 9.35, zf - 0.8], [4.0, 9.35, zf - 0.8], [0, 11.55 + pr * 0, zf - 0.8], WALL, 1);
+  m.tri([4.0, 9.35, zf - 0.8], [-4.0, 9.35, zf - 0.8], [0, 11.55, zf - 0.8], WALL, 1);
+  m.box(-1.95, 1.95, 0.9, 7.8, -HZ - 0.28, -HZ, TRIM);            // door frame
+  m.box(-1.55, 1.55, 0.95, 7.45, -HZ - 0.5, -HZ - 0.28, DOOR);     // door slab
+  for (const y of [1.6, 4.6]) for (const x of [-0.75, 0.75]) m.box(x - 0.5, x + 0.5, y, y + 2.2, -HZ - 0.58, -HZ - 0.5, sh(DOOR, 0.78));
+  m.box(-1.0, 1.0, 5.5, 6.9, -HZ - 0.62, -HZ - 0.5, GLASS, 2);     // door light
+  m.box(0.95, 1.2, 3.7, 3.95, -HZ - 0.72, -HZ - 0.5, COL.CHROME);  // handle
+  m.box(-0.15, 0.15, 8.15, 8.45, -HZ - 0.4, -HZ - 0.28, [1, 0.9, 0.6]);  // porch lamp mount
+  // back door (sliding glass) and deck with rail
+  m.box(-3.3, 3.3, 0.9, 7.6, HZ, HZ + 0.25, TRIM);
+  m.box(-3.0, 3.0, 1.1, 7.4, HZ + 0.25, HZ + 0.4, GLASS, 2);
+  m.box(-0.08, 0.08, 1.1, 7.4, HZ + 0.4, HZ + 0.5, TRIM);
+  m.box(-5.5, 5.5, 0.0, 1.0, HZ, HZ + 7.5, WOOD);
+  for (let k = 0; k < 7; k++) m.box(-5.5, 5.5, 1.0, 1.05, HZ + k * 1.07 + 0.95, HZ + k * 1.07 + 1.0, sh(WOOD, 0.78));
+  for (const [x, z] of [[-5.3, HZ + 7.3], [-1.8, HZ + 7.3], [1.8, HZ + 7.3], [5.3, HZ + 7.3], [-5.3, HZ + 3.6], [5.3, HZ + 3.6]]) m.box(x - 0.18, x + 0.18, 1.0, 4.0, z - 0.18, z + 0.18, TRIM);
+  m.box(-5.5, 5.5, 3.7, 3.95, HZ + 7.15, HZ + 7.45, TRIM); m.box(-5.5, -5.1, 3.7, 3.95, HZ, HZ + 7.45, TRIM); m.box(5.1, 5.5, 3.7, 3.95, HZ, HZ + 7.45, TRIM);
+  // AC condenser on the side with a fan grille
+  m.box(HX + 0.3, HX + 3.0, 0, 2.9, -10.2, -7.5, [0.78, 0.8, 0.78]);
+  m.box(HX + 0.3, HX + 3.0, 2.9, 3.05, -10.3, -7.4, sh(STEEL, 0.9));
+  tube(m, [HX + 3.02, 1.5, -8.85], [HX + 3.06, 1.5, -8.85], 1.0, 1.0, 12, DARK, 0, true);
+  // foundation vents
+  for (const x of [-9, 0, 9]) m.box(x - 0.8, x + 0.8, 0.35, 0.95, HZ + 0.27, HZ + 0.3, DARK);
+  return unit(m, S);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// HANGAR.  Old hangar(): 1 x 0.6 walls + 8-segment barrel roof (to y = 1), door on -z.  Modelled in feet for S = [250, 80, 260].
+// Corrugated side/back walls, painted standing-seam arch roof with skylight strip, bi-parting door leaves on -z that follow
+// the arch, clerestory glass, personnel doors, vents and a small flat-roofed office annex on the back (+z, protrudes 14 ft).
+// All plain colour (material 0) with one glass material, same as the old mesh.
+// ---------------------------------------------------------------------------------------------------------------------
+function hangar() {
+  const m = new MeshBuilder(), S = [250, 80, 260];
+  const HX = 125, HZ = 130, WH = 48, RISE = 32;
+  const WALL = [0.7, 0.72, 0.74], ROOF = [0.55, 0.58, 0.6], DOOR = [0.36, 0.4, 0.46], FRAME = [0.5, 0.53, 0.56];
+  const arch = x => WH + RISE * Math.sqrt(Math.max(0, 1 - (x / HX) ** 2));
+  // roof (corrugation painted per 6 ft panel); slight overhang at the ends and eaves
+  const NA = 18, NZ = 44, ZO = 2;
+  {
+    const grid = [];
+    for (let i = 0; i <= NA; i++) {
+      const a = (i / NA) * PI, x = (HX + 1.4) * Math.cos(a), y = WH - 0.6 + (RISE + 0.6) * Math.sin(a);
+      grid.push(Array.from({ length: NZ + 1 }, (_, j) => [x, y, -HZ - ZO + (j / NZ) * (2 * HZ + 2 * ZO)]));
+    }
+    surface(m, grid, { mat: 0, col: ROOF, ref: (i, j) => [0, WH - 20, grid[i][j][2]],
+      paint: (i, j) => {
+        const xm = (grid[i][j][0] + grid[i + 1][j][0]) / 2;
+        const sky = Math.abs(xm) < 14 && j % 4 !== 3 && j > 2 && j < NZ - 3;
+        return [sky ? [0.72, 0.8, 0.86] : sh(ROOF, (j % 2 ? 0.95 : 1.04) * (i % 6 === 5 ? 0.9 : 1)), 0];
+      } });
+    // arch fascia at both gable ends
+    for (const s of [-1, 1]) {
+      const z = s * (HZ + ZO);
+      for (let i = 0; i < NA; i++) {
+        const pt = (k, r) => { const a = (k / NA) * PI; return [(HX + 1.4 + r) * Math.cos(a), WH - 0.6 + (RISE + 0.6 + r) * Math.sin(a) , z]; };
+        quadO(m, pt(i, 0), pt(i + 1, 0), pt(i + 1, -2.2), pt(i, -2.2), [0, 0, s], FRAME);
+      }
+    }
+  }
+  // corrugated side walls (period 5 ft) and back wall
+  const corr = (axis, s, n, len, mid) => {
+    for (let k = 0; k < n; k++) {
+      const u0 = -len / 2 + (k * len) / n, u1 = -len / 2 + ((k + 1) * len) / n, o0 = k % 2 ? 0.6 : 0, o1 = k % 2 ? 0 : 0.6, c = sh(WALL, k % 2 ? 0.92 : 1);
+      const p = (u, o, y) => axis === 'x' ? [s * (HX + o), y, u] : [u, y, s * (HZ + o)];
+      quadO(m, p(u0, o0, 1.3), p(u1, o1, 1.3), p(u1, o1, WH), p(u0, o0, WH), axis === 'x' ? [s, 0, 0] : [0, 0, s], c);
+    }
+  };
+  for (const s of [-1, 1]) corr('x', s, 52, 2 * HZ);
+  corr('z', 1, 50, 2 * HX);
+  // plinth
+  m.box(-HX - 1.1, HX + 1.1, 0, 1.3, -HZ - 1.1, HZ + 1.1, CONC);
+  // front facade behind the door and header, pilasters outside the door leaves
+  const NF = 40, zf = -HZ;
+  for (let k = 0; k < NF; k++) {
+    const x0 = -HX + (k / NF) * 2 * HX, x1 = -HX + ((k + 1) / NF) * 2 * HX, xm = (x0 + x1) / 2;
+    const side = Math.abs(xm) > 115;
+    quadO(m, [x0, 0, zf], [x1, 0, zf], [x1, arch(x1), zf], [x0, arch(x0), zf], [0, 0, -1], side ? sh(WALL, 0.84) : WALL);
+    if (!side) {
+      const t0 = arch(x0) - 4, t1 = arch(x1) - 4;
+      quadO(m, [x0, 0, zf - 0.5], [x1, 0, zf - 0.5], [x1, t1, zf - 0.5], [x0, t0, zf - 0.5], [0, 0, -1], sh(DOOR, 0.97 + 0.06 * ((k * 7) % 3 / 2)));
+      quadO(m, [x0, t0, zf - 0.5], [x1, t1, zf - 0.5], [x1, arch(x1) - 0.6, zf - 0.5], [x0, arch(x0) - 0.6, zf - 0.5], [0, 0, -1], sh(FRAME, 0.62));
+    }
+  }
+  for (let k = 0; k < NF; k++) {   // back gable above the corrugated wall
+    const x0 = -HX + (k / NF) * 2 * HX, x1 = -HX + ((k + 1) / NF) * 2 * HX;
+    quadO(m, [x0, WH, HZ], [x1, WH, HZ], [x1, arch(x1), HZ], [x0, arch(x0), HZ], [0, 0, 1], sh(WALL, k % 2 ? 0.94 : 1));
+  }
+  for (const s of [-1, 1]) m.box(s * 115 - (s > 0 ? 0 : 10), s * 115 + (s > 0 ? 10 : 0), 0, 56.5, zf - 1.1, zf - 0.1, sh(WALL, 0.78));
+  for (let k = 1; k < 5; k++) { const x = -115 + 46 * k; m.box(x - 0.45, x + 0.45, 0, arch(x) - 4, zf - 0.8, zf - 0.55, sh(DOOR, 0.5)); }     // leaf seams
+  for (let y = 7; y < 74; y += 8) {                                                                                                  // horizontal door ribs
+    const hx = y + 4 <= WH ? 115 : Math.min(115, HX * Math.sqrt(Math.max(0, 1 - ((y + 4 - WH) / RISE) ** 2)));
+    if (hx > 6) m.box(-hx, hx, y, y + 0.7, zf - 0.8, zf - 0.55, sh(DOOR, 0.62));
+  }
+  m.box(-115, 115, 0, 1.2, zf - 1.2, zf - 0.5, DSTEEL);   // bottom guide rail
+  // gutters + downpipes
+  for (const s of [-1, 1]) m.box(s * (HX + 1.4) - (s > 0 ? 0 : 1.3), s * (HX + 1.4) + (s > 0 ? 1.3 : 0), WH - 1.4, WH - 0.2, -HZ, HZ, sh(FRAME, 0.7));
+  // clerestory glass and personnel doors on the sides
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 8; k++) {
+      const z0 = -112 + k * 28.5;
+      m.box(s * (HX + 0.62) - (s > 0 ? 0 : 0.3), s * (HX + 0.62) + (s > 0 ? 0.3 : 0), 38, 44, z0, z0 + 24, GLASS, 2);
+    }
+    m.box(s * (HX + 0.6) - (s > 0 ? 0 : 1.2), s * (HX + 0.6) + (s > 0 ? 1.2 : 0), 1.3, 8, 52, 58.5, sh(DOOR, 0.8));
+    m.box(s * (HX + 0.6) - (s > 0 ? 0 : 0.9), s * (HX + 0.6) + (s > 0 ? 0.9 : 0), 9.0, 9.5, 51, 59.5, [0.9, 0.8, 0.4]);   // wall pack lamp
+  }
+  // turbine vents along the crest
+  for (const z of [-96, -48, 0, 48, 96]) vlathe(m, 0, z, WH + RISE - 0.4, [[0, 1.5], [0.6, 1.5], [1.6, 2.1], [3.2, 1.9], [3.6, 0.9]], 10, { col: sh(STEEL, 1.1), mat: 0, caps: true });
+  // back-side office annex with parapet, glazing, HVAC
+  {
+    const x0 = -122, x1 = -40, z0 = HZ, z1 = HZ + 14, h = 16, AN = [0.74, 0.72, 0.68];
+    m.box(x0, x1, 0, h, z0 - 0.1, z1, AN);
+    m.box(x0 - 0.5, x1 + 0.5, h, h + 1.6, z0 - 0.1, z1 + 0.5, sh(AN, 0.82));
+    for (let k = 0; k < 7; k++) m.box(x0 + 5 + k * 11.2, x0 + 5 + k * 11.2 + 8, 5, 12, z1, z1 + 0.25, GLASS, 2);
+    m.box(x1 - 0.05, x1 + 0.2, 1.3, 8.5, z0 + 4, z0 + 7.5, DOOR);
+    m.box(x0 + 10, x0 + 22, h + 1.6, h + 5.6, z0 + 3, z0 + 11, [0.78, 0.8, 0.8]);
+    m.box(x0 + 30, x0 + 40, h + 1.6, h + 4.6, z0 + 3, z0 + 11, [0.78, 0.8, 0.8]);
+    tube(m, [x0 + 16, h + 5.6, z0 + 7], [x0 + 16, h + 5.65, z0 + 7], 3.4, 3.4, 12, DARK, 0, true);
+  }
+  return unit(m, S);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// TANK.  Old tank(): cylinder r 0.5 x 0.85 (material 1 = instance tint) + conical lid in grey.  Modelled in feet, S = [80, 45, 80]:
+// shell r 40 ft x 38 ft with welded courses, cone roof, top walkway + handrail, spiral stairs, manways, piping, foam chamber.
+// The stairs and walkway reach ~4 ft outside the old r = 0.5 footprint.
+// ---------------------------------------------------------------------------------------------------------------------
+function tank() {
+  const m = new MeshBuilder(), S = [80, 45, 80];
+  const R = 40, Y0 = 1.3, YT = 38.26, SEG = 48, TOP = [0.62, 0.64, 0.66], RAIL = [0.8, 0.62, 0.1];
+  const P = (r, th, y) => [r * Math.cos(th), y, -r * Math.sin(th)];
+  const D = PI / 180;
+  const ann = (r0, r1, y, col, up = true) => {   // flat annulus
+    for (let i = 0; i < 48; i++) {
+      const a0 = (i / 48) * 2 * PI, a1 = ((i + 1) / 48) * 2 * PI, n = [0, up ? 1 : -1, 0];
+      triO(m, P(r0, a0, y), P(r1, a0, y), P(r1, a1, y), n, col); triO(m, P(r0, a0, y), P(r1, a1, y), P(r0, a1, y), n, col);
+    }
+  };
+  // foundation ring
+  vlathe(m, 0, 0, 0, [[0, 41.3], [1.3, 41.3]], 48, { col: CONC, mat: 0, caps: false });
+  ann(39.9, 41.3, 1.3, sh(CONC, 1.05));
+  // shell: 8 welded courses (plate cells + narrow weld seams), staggered vertical welds painted per cell
+  {
+    const prof = [[0, R]];
+    for (let k = 0; k < 8; k++) { prof.push([k * 4.62 + 4.37, R]); prof.push([(k + 1) * 4.62, R]); }
+    vlathe(m, 0, 0, Y0, prof, SEG, { col: [1, 1, 1], mat: 1, caps: false,
+      paint: (i, j) => i % 2 ? [[0.7, 0.7, 0.7], 1] : [sh([1, 1, 1], ((j + (i >> 1) % 2 * 2) % 3 === 0 ? 0.93 : 1) * (0.97 + 0.03 * hash(i, j))), 1] });
+  }
+  // cone roof (flat-topped), central vent, roof hatches
+  vlathe(m, 0, 0, YT, [[0.05, 40.2], [1.6, 30], [3.7, 16], [5.1, 6], [5.9, 2.2]], SEG, { col: TOP, mat: 0, caps: true,
+    paint: (i, j) => [sh(TOP, (j % 4 === 0 ? 0.88 : 1) * (i === 0 ? 0.92 : 1)), 0] });
+  vlathe(m, 0, 0, YT + 5.9, [[0, 1.9], [1.0, 1.9], [1.3, 2.4], [1.55, 0.9]], 12, { col: STEEL, mat: 0, caps: true });
+  const roofY = r => YT + 0.05 + (40.2 - r) * 0.15;
+  for (const [r, th, rr] of [[24, 40, 1.7], [30, 215, 1.2], [18, 320, 1.2]]) { const [x, , z] = P(r, th * D, 0); vlathe(m, x, z, roofY(r) - 0.1, [[0, rr], [0.7, rr], [1.1, rr * 1.15], [1.3, rr * 0.5]], 10, { col: sh(STEEL, 1.05), mat: 0, caps: true }); }
+  // top walkway (grating), kick plate, handrail posts + two rails
+  ann(40.0, 42.4, YT, [0.42, 0.44, 0.47]); ann(40.0, 42.4, YT - 0.25, [0.22, 0.23, 0.25], false);
+  vlathe(m, 0, 0, YT - 0.25, [[0, 42.4], [0.25, 42.4]], 48, { col: DSTEEL, mat: 0, caps: false });
+  vlathe(m, 0, 0, YT, [[0, 42.3], [0.4, 42.3]], 48, { col: DSTEEL, mat: 0, caps: false });
+  for (let k = 0; k < 24; k++) { const th = (k / 24) * 2 * PI + 0.07, [x, , z] = P(42.15, th, 0); m.box(x - 0.14, x + 0.14, YT, YT + 3.6, z - 0.14, z + 0.14, RAIL); }
+  for (const h of [1.9, 3.5]) vlathe(m, 0, 0, YT + h - 0.12, [[0, 42.3], [0.24, 42.3]], 48, { col: RAIL, mat: 0, caps: false });
+  for (let k = 0; k < 24; k++) { const th = (k / 24) * 2 * PI; tube(m, P(41.0, th, YT - 0.25), P(40.1, th, YT - 3.0), 0.12, 0.12, 4, DSTEEL, 0, false); }   // brackets under the walkway
+  // spiral stair (44 treads, ~60 degrees round the shell) with stringer, posts, handrail
+  {
+    const K = 44, th0 = 200 * D, dth = (1.0 / 43) * D * 0 + (60 * D) / K, rise = (YT - 0.9 - 0.9) / K;
+    const pts = [], rs = 41.8, re = 44.8;
+    for (let k = 0; k < K; k++) {
+      const th = th0 + k * dth, y = 1.0 + k * rise + rise, s0 = mark(m);
+      m.box(rs, re, y - 0.1, y + 0.1, -0.62, 0.62, [0.46, 0.48, 0.5]);
+      m.box(rs, re, y + 0.1, y + 0.13, -0.62, -0.5, [0.8, 0.8, 0.8]);       // nosing
+      xform(m, s0, rotY(th), [0, 0, 0]);
+      pts.push({ th, y });
+    }
+    for (let k = 0; k < K - 1; k++) {
+      const a = pts[k], b = pts[k + 1];
+      quadO(m, P(re, a.th, a.y - 0.95), P(re, b.th, b.y - 0.95), P(re, b.th, b.y + 0.1), P(re, a.th, a.y + 0.1), P(1, (a.th + b.th) / 2, 0), DSTEEL);
+      quadO(m, P(rs, a.th, a.y - 0.95), P(rs, b.th, b.y - 0.95), P(rs, b.th, b.y + 0.1), P(rs, a.th, a.y + 0.1), P(-1, (a.th + b.th) / 2, 0), DSTEEL);
+    }
+    for (let k = 0; k < K; k += 3) { const a = pts[k]; tube(m, P(re - 0.2, a.th, a.y), P(re - 0.2, a.th, a.y + 3.3), 0.11, 0.11, 4, RAIL, 0, false); }
+    for (let k = 0; k + 3 < K; k += 3) { const a = pts[k], b = pts[k + 3]; tube(m, P(re - 0.2, a.th, a.y + 3.3), P(re - 0.2, b.th, b.y + 3.3), 0.1, 0.1, 4, RAIL, 0, false); tube(m, P(re - 0.2, a.th, a.y + 1.7), P(re - 0.2, b.th, b.y + 1.7), 0.08, 0.08, 4, RAIL, 0, false); }
+    m.box(41.0, 46.0, 0, 0.35, -2.2, 2.2, CONC, 0); // landing pad foot (rotated below)
+    // (pad built along +x; move it under the first tread)
+  }
+  // fix the pad: rebuild it correctly in place under the first tread by rotating the last 12 vertices
+  { const n = m.P.length / 3, s0 = n - 36; xform(m, s0, rotY(200 * D), [0, 0, 0]); }
+  // manway, nozzle + valve manifold, fire-water riser with foam chamber, name panel
+  { const [x0, , z0] = P(R - 0.1, 90 * D, 0), [x1, , z1] = P(R + 0.7, 90 * D, 0); tube(m, [x0, 4.5, z0], [x1, 4.5, z1], 1.9, 1.9, 16, sh(STEEL, 1.05), 0, true); tube(m, [x0, 4.5, z0], [x1 * 0 + x0, 4.5, z0 - 0.1], 0.1, 0.1, 3, STEEL, 0, false); }
+  { const th = 255 * D; tube(m, P(R - 0.1, th, 3.2), P(R + 6.5, th, 3.2), 0.6, 0.6, 8, STEEL, 0, true); tube(m, P(R + 6.5, th, 3.2), P(R + 6.5, th, 0.4), 0.6, 0.6, 8, STEEL, 0, true);
+    tube(m, P(R + 6.5, th, 0.7), P(R + 11.5, th, 0.7), 0.6, 0.6, 8, STEEL, 0, true);
+    const [vx, , vz] = P(R + 4, th, 0); m.box(vx - 0.7, vx + 0.7, 2.4, 4.0, vz - 0.7, vz + 0.7, [0.7, 0.12, 0.1]); tube(m, [vx, 4.0, vz], [vx, 4.9, vz], 0.12, 0.12, 4, STEEL, 0, false); tube(m, [vx - 0.9, 4.9, vz], [vx + 0.9, 4.9, vz], 0.12, 0.12, 4, [0.7, 0.12, 0.1], 0, false); }
+  { const th = 320 * D; tube(m, P(R + 0.7, th, 1.2), P(R + 0.7, th, YT - 0.5), 0.38, 0.38, 6, [0.72, 0.14, 0.1], 0, true);
+    for (let y = 6; y < YT; y += 8) tube(m, P(R - 0.1, th, y), P(R + 0.7, th, y), 0.14, 0.14, 4, DSTEEL, 0, false);
+    const [fx, , fz] = P(R + 1.5, th, 0); m.box(fx - 1.4, fx + 1.4, YT - 3.4, YT - 0.6, fz - 1.4, fz + 1.4, [0.72, 0.14, 0.1]); }
+  { const th = 20 * D, a = P(R + 0.08, th, 0), b = P(R + 0.08, (20 + 7.6) * D, 0); const q = [[a[0], 14, a[2]], [b[0], 14, b[2]], [b[0], 22, b[2]], [a[0], 22, a[2]]]; quadO(m, q[0], q[1], q[2], q[3], P(1, 24 * D, 0), [0.28, 0.3, 0.34]); }
+  return unit(m, S);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// WINDSOCK.  Old windsock(): 1 x 1 box pole to y = 1 plus a 5-band tapered sock along -z from (0, 1, 0).  S = [22, 22, 22]
+// (sz is scaled by wind strength, so the sock lengthens/shortens).  Same layout: mast on the ground, hoop at y = 1, sock to -z.
+// NOTE: the renderer pitches the whole instance about its origin (the ground) to droop the sock, which also leans the mast;
+// windsockSock() is the sock-only variant with its origin at the swivel, for use with the existing POLE instance as the mast.
+// ---------------------------------------------------------------------------------------------------------------------
+function sockParts(m, hy, withMast) {
+  const OR = [1, 0.38, 0.08], WH = [0.95, 0.95, 0.92], HR = 1.85;
+  if (withMast) {
+    tube(m, [0, 0.25, 0], [0, hy - HR, 0], 0.3, 0.15, 8, [0.8, 0.8, 0.8], 0, true);
+    vlathe(m, 0, 0, 0, [[0, 0.95], [0.25, 0.95]], 12, { col: CONC, mat: 0, caps: true });
+    vlathe(m, 0, 0, 0.25, [[0, 0.6], [0.25, 0.4]], 8, { col: STEEL, mat: 0, caps: true });
+  }
+  tube(m, [0, hy - HR - 0.35, 0], [0, hy - HR + 0.08, 0], 0.17, 0.17, 6, DSTEEL, 0, true);   // swivel
+  // hoop (torus, radius 1.85, tube 0.09) in the xy plane
+  const tg = [];
+  for (let i = 0; i < 20; i++) {
+    const ph = (i / 20) * 2 * PI, row = [];
+    for (let j = 0; j < 6; j++) { const ps = (j / 6) * 2 * PI, rr = HR + 0.09 * Math.cos(ps); row.push([rr * Math.cos(ph), hy + rr * Math.sin(ph), 0.09 * Math.sin(ps)]); }
+    tg.push(row);
+  }
+  surface(m, tg, { wrapI: true, wrapJ: true, mat: 0, col: [0.75, 0.76, 0.78], ref: (i) => [HR * Math.cos((i / 20) * 2 * PI), hy + HR * Math.sin((i / 20) * 2 * PI), 0] });
+  // sock: tapered, with a stiff sag, five orange / white bands and a little fabric ripple
+  const NS = 10, ns = 14, grid = [];
+  for (let k = 0; k <= NS; k++) {
+    const t = k / NS, r = HR * 0.97 - (HR * 0.97 - 0.6) * Math.pow(t, 0.85), z = -t * 12, sag = -0.55 * t * t, row = [];
+    for (let j = 0; j < ns; j++) { const a = (j / ns) * 2 * PI, w = 1 + 0.045 * Math.sin(2 * a + k * 1.3) * Math.min(1, t * 3); row.push([Math.cos(a) * r * w, hy + sag + Math.sin(a) * r * w, z]); }
+    grid.push(row);
+  }
+  surface(m, grid, { wrapJ: true, mat: 0, ref: (i) => [0, hy - 0.55 * (i / NS) ** 2, grid[i][0][2]],
+    paint: (i, j) => [sh(Math.floor(i / 2) % 2 ? WH : OR, (i % 2 ? 0.92 : 1) * (j % 2 ? 0.97 : 1)), 0] });
+}
+function windsock() { const m = new MeshBuilder(); sockParts(m, 22, true); return unit(m, [22, 22, 22]); }
+function windsockSock() { const m = new MeshBuilder(); sockParts(m, 0, false); tube(m, [0, -1.85, 0], [0, -1.6, 0], 0.17, 0.17, 6, DSTEEL, 0, true); return unit(m, [22, 22, 22]); }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// RADAR ANTENNA.  Old radarAntenna(): flat 1 x 0.8 x 0.12 slab on a short post, origin = top of the 60 ft pole, spun about y.
+// S = [34, 10, 34].  An ASR-style antenna: curved lattice reflector (34 x 6.8 ft) facing -z, offset feed horns on struts,
+// secondary-surveillance (beacon) array on top, ribbed backing frame, trunnion arms, drum pedestal and turntable.
+// ---------------------------------------------------------------------------------------------------------------------
+function radarAntenna() {
+  const m = new MeshBuilder(), S = [34, 10, 34];
+  const GR = [0.84, 0.85, 0.87], GR2 = [0.7, 0.72, 0.75];
+  vlathe(m, 0, 0, 0, [[0, 4.4], [0.6, 4.4]], 24, { col: sh(STEEL, 0.9), mat: 0, caps: true });
+  vlathe(m, 0, 0, 0.6, [[0, 2.9], [0.3, 2.9], [0.5, 2.5], [1.5, 2.35], [1.8, 2.7], [2.0, 2.7]], 20, { col: GR, mat: 0, caps: true });
+  // reflector: parabolic in elevation, straight along x.  front = lattice, back = skin
+  const Y0 = 2.5, Y1 = 8.6, YC = (Y0 + Y1) / 2, HF = (Y1 - Y0) / 2, NX = 18, NY = 10, zf = y => 0.9 - 1.9 * ((y - YC) / HF) ** 2;
+  const fg = [], bg = [];
+  for (let i = 0; i <= NX; i++) {
+    const x = -17 + (i / NX) * 34, rf = [], rb = [];
+    for (let j = 0; j <= NY; j++) { const y = Y0 + (j / NY) * (Y1 - Y0); rf.push([x, y, zf(y)]); rb.push([x, y, zf(y) + 0.5]); }
+    fg.push(rf); bg.push(rb);
+  }
+  surface(m, fg, { mat: 0, col: GR, ref: (i, j) => [fg[i][j][0], fg[i][j][1], 40], paint: (i, j) => [sh(GR, (j % 2 ? 0.8 : 1.0) * (i % 3 === 0 ? 0.93 : 1)), 0] });
+  surface(m, bg, { mat: 0, col: GR2, ref: (i, j) => [bg[i][j][0], bg[i][j][1], -40] });
+  for (let j = 0; j < NY; j++) { for (const i of [0, NX]) quadO(m, fg[i][j], fg[i][j + 1], bg[i][j + 1], bg[i][j], [i ? 1 : -1, 0, 0], GR2); }
+  for (const j of [0, NY]) for (let i = 0; i < NX; i++) quadO(m, fg[i][j], fg[i + 1][j], bg[i + 1][j], bg[i][j], [0, j ? 1 : -1, 0], GR2);
+  // rib frame behind the reflector
+  for (let k = 0; k <= 6; k++) { const x = -15 + k * 5; m.box(x - 0.25, x + 0.25, Y0, Y1, zf(YC) + 0.5, 2.5, sh(GR2, 0.9)); m.box(x - 0.2, x + 0.2, Y0 + 0.2, Y1 - 0.2, 2.4, 2.9, GR2); }
+  for (const y of [Y0 + 0.3, YC, Y1 - 0.3]) m.box(-16.8, 16.8, y - 0.3, y + 0.3, 2.2, 2.9, sh(GR2, 0.8));
+  // trunnion arms from the drum to the backbone
+  for (const x of [-1.6, 1.6]) { tube(m, [x, 2.0, 0], [x * 2.2, YC - 0.5, 2.0], 0.4, 0.3, 6, GR, 0, true); }
+  tube(m, [-5.5, YC, 2.6], [5.5, YC, 2.6], 0.4, 0.4, 6, GR, 0, true);
+  // feed horns (upper and lower beam) on a boom with struts back to the reflector rim
+  const FZ = -4.0;
+  for (const y of [YC + 1.0, YC - 1.0]) {
+    m.box(-0.5, 0.5, y - 0.35, y + 0.35, FZ, FZ + 1.3, GR);
+    m.box(-1.2, 1.2, y - 0.9, y + 0.9, FZ - 1.3, FZ, GR);
+    m.box(-1.0, 1.0, y - 0.7, y + 0.7, FZ - 1.34, FZ - 1.3, DARK);
+  }
+  tube(m, [0, YC, FZ + 1.3], [0, YC, zf(YC)], 0.35, 0.35, 6, GR, 0, true);
+  for (const [xa, ya, xb, yb] of [[0, Y1, 0, YC + 1.5], [0, Y0, 0, YC - 1.5], [-9, Y1, -0.8, YC + 1.7], [9, Y1, 0.8, YC + 1.7], [-9, Y0, -0.8, YC - 1.7], [9, Y0, 0.8, YC - 1.7]])
+    tube(m, [xa, ya, zf(ya)], [xb, yb, FZ], 0.13, 0.13, 5, GR2, 0, true);
+  // secondary-surveillance array on top: housing + 27 dark slots on the front, two posts to the reflector
+  m.box(-13.5, 13.5, 8.8, 9.95, -0.5, 0.5, GR);
+  for (let k = 0; k < 27; k++) { const x = -13 + k + 0.0; m.box(x - 0.2, x + 0.2, 9.0, 9.75, -0.53, -0.5, DSTEEL); }
+  m.box(-0.6, 0.6, 8.5, 8.85, -0.3, 0.3, GR2); m.box(-12.5, -11.5, 8.5, 8.85, -0.3, 0.3, GR2); m.box(11.5, 12.5, 8.5, 8.85, -0.3, 0.3, GR2);
+  return unit(m, S);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// VEHICLE.  Old vehicle(): low box body + cab box, cab-forward (front = -z), tint via material 1, scaled (6,4.8,15) ft for
+// road cars and (7,7,18) ft for apron vans.  Modelled for S = [6.5, 5.8, 16.5]: a wagon/van with raked windscreen,
+// glass greenhouse, wheel arches + 4 real wheels, bumpers, grille, lamps, mirrors, roof rails.  Body = material 1 (tint),
+// glass = 2, everything else plain.  Wheels are circular at the nominal scale and only mildly oval at either instance size.
+// ---------------------------------------------------------------------------------------------------------------------
+function vehicle() {
+  const m = new MeshBuilder(), S = [6.5, 5.8, 16.5];
+  const W = 3.25, BODY = [1, 1, 1], PL = [0.07, 0.07, 0.08];
+  // lower body (superellipse sections, nose first)
+  const lo = [[-8.25, 2.25, 1.15, 2.3], [-7.8, 2.85, 0.9, 3.0], [-6.0, 3.1, 0.75, 3.2], [-3.6, 3.2, 0.75, W], [0, 3.28, 0.75, W], [5, 3.3, 0.75, W], [7.4, 3.35, 0.9, 3.15], [8.25, 3.2, 1.2, 2.8]];
+  loft(m, lo.map(([z, t, b, w]) => ({ z, cx: 0, cy: (t + b) / 2, w, h: (t - b) / 2, n: 3.3 })), 24, { col: BODY, mat: 1 });
+  // greenhouse
+  const cab = [[-3.7, 3.4], [-3.1, 4.25], [-1.9, 5.45], [-1.0, 5.75], [0.2, 5.8], [0.6, 5.8], [4.6, 5.8], [5.2, 5.76], [6.7, 5.45], [7.6, 4.3], [8.0, 3.4]];
+  loft(m, cab.map(([z, t]) => ({ z, cx: 0, cy: (t + 3.0) / 2, w: 2.78 - 0.2 * (t - 3.4) / 2.4, h: (t - 3.0) / 2, n: 3.6 })), 24, { col: BODY, mat: 1, caps: true,
+    paint: (i, j) => {
+      const side = (j >= 20 || j <= 2) || (j >= 9 && j <= 15), top = j >= 4 && j <= 7 || j >= 16 && j <= 19 && false;
+      if (i <= 2 && j >= 4 && j <= 7) return [GLASS, 2];                                   // windscreen
+      if (i >= 8 && j >= 4 && j <= 7) return [GLASS, 2];                                   // tailgate glass
+      if (side && [2, 3, 5, 7].includes(i)) return [GLASS, 2];
+      void top; return [BODY, 1];
+    } });
+  // underbody + sill cladding + bumpers
+  m.box(-2.9, 2.9, 0.45, 0.85, -7.4, 7.4, PL);
+  for (const s of [-1, 1]) m.box(s * (W + 0.02) - (s > 0 ? 0.05 : 0), s * (W + 0.02) + (s > 0 ? 0 : 0.05), 0.95, 1.35, -6.8, 6.8, PL);
+  m.box(-3.0, 3.0, 0.62, 1.55, -8.5, -7.9, PL); m.box(-3.0, 3.0, 0.62, 1.55, 7.9, 8.5, PL);
+  m.box(-1.0, 1.0, 0.7, 1.3, 8.5, 8.56, [0.9, 0.9, 0.88]);                             // rear plate
+  // grille, headlamps, tail lamps
+  m.box(-1.5, 1.5, 1.6, 2.45, -8.3, -8.24, PL);
+  for (let k = 0; k < 4; k++) m.box(-1.45, 1.45, 1.75 + k * 0.2, 1.82 + k * 0.2, -8.33, -8.3, COL.CHROME);
+  for (const s of [-1, 1]) {
+    m.box(Math.min(s * 2.0, s * 3.0), Math.max(s * 2.0, s * 3.0), 2.15, 2.65, -8.29, -8.22, [0.96, 0.95, 0.85]);
+    m.box(Math.min(s * 2.1, s * 3.1), Math.max(s * 2.1, s * 3.1), 2.2, 3.05, 8.24, 8.32, [0.72, 0.06, 0.05]);
+    m.box(Math.min(s * 3.2, s * 3.3), Math.max(s * 3.2, s * 3.3), 2.2, 2.45, -7.6, -7.2, [0.96, 0.8, 0.3]);   // side marker
+  }
+  // wheel arches (dark) and wheels outside the arch plane
+  for (const s of [-1, 1]) for (const zc of [-5.1, 5.1]) {
+    const x = s * (W + 0.03), pts = [];
+    for (let k = 0; k <= 12; k++) { const a = (k / 12) * PI; pts.push([x, 1.4 + 1.65 * Math.sin(a), zc + 1.65 * Math.cos(a)]); }
+    pts.push([x, 0.8, zc - 1.65], [x, 0.8, zc + 1.65]);
+    const hub = [x, 1.1, zc];
+    for (let k = 0; k < pts.length - 1; k++) triO(m, hub, pts[k], pts[k + 1], [s, 0, 0], [0.03, 0.03, 0.035]);
+    triO(m, hub, pts[pts.length - 2], pts[pts.length - 1], [s, 0, 0], [0.03, 0.03, 0.035]);
+    triO(m, hub, pts[pts.length - 1], pts[0], [s, 0, 0], [0.03, 0.03, 0.035]);
+    wheel(m, s * 2.95, 1.3, zc, 1.3, 0.9, 16);
+  }
+  // door shuts and handles
+  for (const s of [-1, 1]) {
+    for (const z of [-1.3, 0.4, 4.8]) m.box(Math.min(s * W, s * (W + 0.03)), Math.max(s * W, s * (W + 0.03)), 1.4, 3.3, z, z + 0.07, [0.45, 0.45, 0.47]);
+    for (const z of [-0.6, 1.0]) m.box(Math.min(s * (W + 0.0), s * (W + 0.12)), Math.max(s * (W + 0.0), s * (W + 0.12)), 3.0, 3.12, z, z + 0.55, COL.CHROME);
+    // mirrors
+    m.box(Math.min(s * 2.95, s * 3.55), Math.max(s * 2.95, s * 3.55), 4.0, 4.55, -2.55, -1.85, PL);
+    // roof rails
+    m.box(s * 1.7 - 0.07, s * 1.7 + 0.07, 5.82, 5.95, -0.6, 4.7, [0.7, 0.71, 0.73]);
+    for (const z of [-0.5, 4.6]) m.box(s * 1.7 - 0.06, s * 1.7 + 0.06, 5.78, 5.9, z - 0.1, z + 0.1, PL);
+  }
+  // shark-fin antenna + wipers
+  triO(m, [-0.12, 5.8, 5.2], [0.12, 5.8, 5.2], [0, 6.1, 5.9], [0, 0, -1], PL); m.box(-0.12, 0.12, 5.78, 5.84, 5.2, 6.1, PL);
+  return unit(m, S);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// JET BRIDGE.  Old jetBridge(): unit tunnel box x +-0.5, y 0.55..1, z 0 (terminal rotunda) .. -1 (aircraft cab) + one 0.24-wide leg
+// at z = -0.78.  S = [10, 18, L] with L ~ 35..120 ft (variable), modelled for L = 80.  Rotunda + support column at the terminal
+// end, three telescoping glazed tunnel sections, accordion canopy + rubber bumper at the aircraft end (z = -1), portal leg with
+// drive bogies near the cab.  Everything plain colour (material 0) with glass.
+// ---------------------------------------------------------------------------------------------------------------------
+function jetBridge() {
+  const m = new MeshBuilder(), S = [10, 18, 80];
+  const SK = [0.8, 0.82, 0.84], SK2 = [0.58, 0.6, 0.63], YEL = [0.85, 0.7, 0.14], CAB = [0.72, 0.74, 0.76];
+  const sec = (z, w, yt, yb) => ({ z, cx: 0, cy: (yt + yb) / 2, w, h: (yt - yb) / 2, n: 5 });
+  // tunnel sections: windows painted on the upper side cells, mullion every third row, darker skirt
+  const tunnel = (z0, z1, w, yt, yb, rows) => {
+    const secs = []; for (let k = 0; k <= rows; k++) secs.push(sec(z0 + (z1 - z0) * k / rows, w, yt, yb));
+    loft(m, secs, 24, { col: SK, mat: 0, caps: false, paint: (i, j) => {
+      if ((j <= 2 || (j >= 9 && j <= 11)) && i % 3 !== 2) return [GLASS, 2];
+      if (j >= 18 && j <= 23) return [SK2, 0];
+      return [sh(SK, i % 3 === 2 ? 0.93 : 1), 0];
+    } });
+  };
+  tunnel(0, -30, 5.0, 18.0, 9.9, 9);
+  tunnel(-26, -58, 4.62, 17.6, 10.3, 9);
+  tunnel(-54, -72, 4.25, 17.2, 10.7, 6);
+  for (const z of [-30]) loft(m, [sec(z + 0.35, 5.14, 18.12, 9.78), sec(z - 0.35, 5.14, 18.12, 9.78)], 24, { col: DSTEEL, mat: 0, caps: false });
+  for (const z of [-58]) loft(m, [sec(z + 0.35, 4.76, 17.72, 10.18), sec(z - 0.35, 4.76, 17.72, 10.18)], 24, { col: DSTEEL, mat: 0, caps: false });
+  // cab, accordion canopy, rubber bumper (aircraft end at z = -80)
+  loft(m, [sec(-72, 4.3, 17.1, 10.8), sec(-73, 4.7, 17.5, 10.4), sec(-76, 4.7, 17.5, 10.4)], 24, { col: CAB, mat: 0, caps: false, paint: (i, j) => ((j <= 3 || (j >= 8 && j <= 11)) ? [GLASS, 2] : [CAB, 0]) });
+  { const secs = []; for (let k = 0; k <= 10; k++) { const o = k % 2 ? 0.0 : 0.22; secs.push(sec(-76 - k * 0.38, 4.7 + o, 17.5 + o, 10.4 - o)); }
+    loft(m, secs, 24, { col: [0.2, 0.2, 0.22], mat: 0, caps: false }); }
+  loft(m, [sec(-79.9, 5.15, 18.1, 9.9), sec(-80.0, 5.15, 18.1, 9.9)], 24, { col: BLK, mat: 0, caps: true });
+  loft(m, [sec(-79.5, 5.15, 18.1, 9.9), sec(-79.95, 5.15, 18.1, 9.9)], 24, { col: sh(BLK, 1.5), mat: 0, caps: false });
+  // rotunda (drum) with window band, roof cap; support column + base
+  vlathe(m, 0, -0.8, 9.2, [[0, 5.9], [0.5, 6.3], [1.4, 6.35], [3.6, 6.35], [8.4, 6.35], [8.9, 6.3], [9.3, 5.8]], 20, { col: SK, mat: 0, caps: true,
+    paint: (i, j) => (i === 3 ? (j % 3 === 0 ? [SK2, 0] : [GLASS, 2]) : [i === 0 || i >= 4 ? sh(SK, 0.92) : SK, 0]) });
+  vlathe(m, 0, -0.8, 0, [[0, 1.0], [8.7, 1.0], [9.3, 1.0]], 10, { col: YEL, mat: 0, caps: false });
+  vlathe(m, 0, -0.8, 0, [[0, 2.5], [0.35, 2.5]], 12, { col: CONC, mat: 0, caps: true });
+  // portal leg near the cab: two telescoping columns, cross beam, X brace, bogies with wheels
+  const ZL = -64;
+  for (const x of [-3.6, 3.6]) {
+    m.box(x - 0.55, x + 0.55, 1.9, 5.8, ZL - 0.55, ZL + 0.55, YEL);
+    m.box(x - 0.42, x + 0.42, 5.8, 9.9, ZL - 0.42, ZL + 0.42, SK2);
+    m.box(x - 0.55, x + 0.55, 1.5, 1.95, ZL - 2.2, ZL + 2.2, DSTEEL);
+    for (const dz of [-1.4, 1.4]) wheel(m, x, 0.95, ZL + dz, 0.95, 0.75, 12);
+    m.box(x - 0.45, x + 0.45, 1.0, 1.8, ZL + 1.9, ZL + 2.7, [0.2, 0.3, 0.45]);   // drive motor
+  }
+  m.box(-4.0, 4.0, 9.2, 9.9, ZL - 0.5, ZL + 0.5, DSTEEL);
+  tube(m, [-3.4, 3.0, ZL + 0.62], [3.4, 8.6, ZL + 0.62], 0.13, 0.13, 5, DSTEEL, 0, true);
+  tube(m, [3.4, 3.0, ZL + 0.62], [-3.4, 8.6, ZL + 0.62], 0.13, 0.13, 5, DSTEEL, 0, true);
+  // underside dark panel strip + warning stripes on the bumper
+  for (const x of [-4.6, 4.05]) m.box(x, x + 0.55, 10.2, 17.8, -80.06, -80.0, [0.9, 0.75, 0.1]);
+  return unit(m, S);
+}
+
+return { tree, house, hangar, tank, windsock, windsockSock, radarAntenna, vehicle, jetBridge };
 });
 __def("js/render/models/A10.js", function () {
 // Fairchild Republic A-10C Thunderbolt II — high-detail tower-view model.
@@ -19845,7 +20507,8 @@ __def("js/render/tower.js", function () {
 // streaks follow the precip code. Drag to look, wheel to zoom, the bar at the top picks a view preset.
 // Labels and the cab frame go on the shared 2D overlay.
 const { compile } = __m("js/render/gl.js");
-const { MeshBuilder, airliner, turboprop, fighter, straightWing, flyingWing, dart, gear, unitBox, house, hangar, tree, tank, pole, windsock, radarAntenna, vehicle, jetBridge, triangleCraft, saucer } = __m("js/render/towerMeshes.js");
+const { MeshBuilder, airliner, turboprop, fighter, straightWing, flyingWing, dart, gear, unitBox, house, tree, pole, vehicle, triangleCraft, saucer } = __m("js/render/towerMeshes.js");
+const PROPS = __m("js/render/models/PROPS.js");
 const { buildScene, runwayPaint, runwayWear, geomFor, gyFlags, liveryFor } = __m("js/render/towerScene.js");
 const { HD } = __m("js/render/models/index.js");
 const { DEG, hdgVec, clamp, lerp, FT_PER_NM } = __m("js/core/geo.js");
@@ -20305,11 +20968,17 @@ void main() {
   float fres = pow(1.0 - max(vd.y, 0.0), 5.0);
   // dry sheen: a low sun glints off the polished surface
   col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 40.0) * (0.03 + 0.1 * gloss) * cloudShadow(vW) * (kind == 8 ? 0.2 : 1.0);
-  if (uWet > 0.0) {         // wet pavement reflects the sky and the sun; low spots hold puddles
-    float pud = smoothstep(0.55, 0.7, tn(pa / 22.0) * 0.7 + tn(pa / 5.0) * 0.3) * uWet * (kind == 8 ? 0.0 : 1.0);
-    float k = clamp(uWet * (0.5 + 0.5 * spec) * fres * 1.5 + pud * 0.5, 0.0, 0.9);
-    col = mix(col * (1.0 - uWet * 0.35), mix(uHor, uZen, 0.2), k);
-    col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 160.0) * (uWet * 2.0 * spec + pud * 3.0);
+  if (uWet > 0.0) {         // wet pavement: darker and more saturated; small dark puddles with a Fresnel sky mirror
+    float lum = dot(col, vec3(0.3, 0.59, 0.11));
+    vec3 dry = col;
+    vec3 wet = mix(vec3(lum), col, 1.0 + 0.25 * uWet) * (1.0 - 0.32 * uWet);
+    float pm = smoothstep(0.64, 0.72, tn(pa / 9.0) * 0.6 + tn(pa / 2.4) * 0.4) * smoothstep(0.35, 0.6, tn(pa / 70.0) + 0.25) * uWet * (kind == 8 ? 0.0 : 1.0);
+    float F = 0.03 + 0.97 * fres;                              // mirror reflectance: weak looking down, strong at grazing angles
+    vec3 sky = mix(uHor, uZen, 0.35) * 0.55;
+    vec3 pcol = mix(wet * 0.45, sky, F);
+    pcol = mix(pcol, min(pcol, dry * 0.85), smoothstep(0.03, 0.1, vd.y));   // never lighter than the dry surface from above
+    col = mix(wet, pcol, pm);
+    col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 160.0) * (uWet * 1.2 * spec + pm * 3.0);
   }
   o = vec4(fog(col, vW), a);
 }`;
@@ -20467,8 +21136,10 @@ function meshLibrary() {
     K135: airliner({ len: 1.04, r: 0.05, eng: 4, engR: 0.034 }), C17: airliner({ len: 0.97, r: 0.075, eng: 4, engR: 0.04, ttail: true }),
     C130: turboprop({ len: 0.74, r: 0.07 }),
     FTR: fighter(), A10: straightWing({ len: 0.93 }), U2: straightWing({ len: 0.61, glider: true }), B2: flyingWing(), DART: dart(),
-    GEAR: gear(), BOX: unitBox(1), OFFICE: unitBox(3, [0.3, 0.31, 0.33]), HOUSE: house(), HANGAR: hangar(), TREE_C: tree(true), TREE_D: tree(false),
-    TANK: tank(), POLE: pole(), VEH: vehicle(), BRIDGE: jetBridge(), WSOCK: windsock(), RADAR: radarAntenna(),
+    GEAR: gear(), BOX: unitBox(1), OFFICE: unitBox(3, [0.3, 0.31, 0.33]), HOUSE: PROPS.house(), HANGAR: PROPS.hangar(), TREE_C: PROPS.tree(true), TREE_D: PROPS.tree(false),
+    // low-detail twins (the old crude meshes) for the thousands of static instances beyond the near radius
+    HOUSE_LO: house(), TREE_C_LO: tree(true), TREE_D_LO: tree(false), VEH_LO: vehicle(),
+    TANK: PROPS.tank(), POLE: pole(), VEH: PROPS.vehicle(), BRIDGE: PROPS.jetBridge(), WSOCK: PROPS.windsock(), RADAR: PROPS.radarAntenna(),
   };
 }
 
@@ -20498,7 +21169,8 @@ class Tower {
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
     this.meshes = {};
-    for (const [k, m] of Object.entries(meshLibrary())) this.meshes[k] = this.makeMesh(m);
+    const lib = meshLibrary();
+    for (const [k, m] of Object.entries(lib)) if (!k.endsWith('_LO')) this.meshes[k] = this.makeMesh(m, lib[k + '_LO']);
     this.lightS = this.makeLights(); this.lightD = this.makeLights();
     this.dynLights = new Float32Array(12 * 4096); this.nDyn = 0;
     this.apKey = null; this.scene = null;
@@ -20514,7 +21186,7 @@ class Tower {
   }
 
   // ---------- GL resources ----------
-  makeMesh(m) {
+  makeMesh(m, lo) {
     const gl = this.gl;
     const vb = [m.P, m.N, m.C].map(a => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW); return b; });
     const mk = () => {
@@ -20527,7 +21199,18 @@ class Tower {
       return { vao, ib };
     };
     const s = mk(), d = mk();
-    return { n: m.n, vaoS: s.vao, ibS: s.ib, vaoD: d.vao, ibD: d.ib, nS: 0, nearS: 0, data: new Float32Array(STRIDE * 64), count: 0, ground: 0 };
+    return { n: m.n, vaoS: s.vao, ibS: s.ib, vaoD: d.vao, ibD: d.ib, nS: 0, nearS: 0, data: new Float32Array(STRIDE * 64), count: 0, ground: 0,
+      lo: lo ? { n: lo.n, vb: [lo.P, lo.N, lo.C].map(a => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW); return b; }), vao: gl.createVertexArray() } : null };
+  }
+  // static instances are stored near-first: the HD mesh draws the first nearS, the low-detail twin the rest (attribute offset stands in for a base instance)
+  bindLod(m) {
+    const gl = this.gl, lo = m.lo; if (!lo) return;
+    gl.bindVertexArray(lo.vao);
+    [[0, 3], [1, 3], [2, 4]].forEach(([loc, n], i) => { gl.bindBuffer(gl.ARRAY_BUFFER, lo.vb[i]); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.ibS);
+    const st = STRIDE * 4, base = m.nearS * st;
+    [[3, 4, 0], [4, 4, 16], [5, 3, 32], [6, 3, 44], [7, 3, 56]].forEach(([loc, n, off]) => { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, st, base + off); gl.vertexAttribDivisor(loc, 1); });
+    gl.bindVertexArray(null);
   }
   makeLights() {
     const gl = this.gl, vao = gl.createVertexArray(); gl.bindVertexArray(vao);
@@ -20593,6 +21276,7 @@ class Tower {
       const st = S.instances[k];
       m.nS = st ? st.count : 0; m.nearS = st ? st.near : 0;
       gl.bindBuffer(gl.ARRAY_BUFFER, m.ibS); gl.bufferData(gl.ARRAY_BUFFER, st ? st.data : new Float32Array(STRIDE), gl.STATIC_DRAW);
+      this.bindLod(m);
     }
     // static lights
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lightS.buf); gl.bufferData(gl.ARRAY_BUFFER, S.lights, gl.STATIC_DRAW);
@@ -21053,7 +21737,10 @@ class Tower {
     p = this.p.mesh; gl.useProgram(p.p); common(p);
     gl.uniform1f(p.u.uMinPx, minPx); gl.uniform1f(p.u.uShadow, 0); gl.uniform3fv(p.u.uShadowDir, E.sunDir);
     for (const m of Object.values(this.meshes)) {
-      if (m.nS) { gl.bindVertexArray(m.vaoS); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.nS); }
+      if (m.lo) {
+        if (m.nearS) { gl.bindVertexArray(m.vaoS); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.nearS); }
+        if (m.nS > m.nearS) { gl.bindVertexArray(m.lo.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.lo.n, m.nS - m.nearS); }
+      } else if (m.nS) { gl.bindVertexArray(m.vaoS); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.nS); }
       if (m.count) { gl.bindVertexArray(m.vaoD); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.count); }
     }
     // cloud deck
