@@ -1,0 +1,80 @@
+[
+{
+"what": "Spiral arm geometry (four-arm logarithmic spirals, pitch angles, Sun-GC distance)",
+"source": "Reid et al. 2019, Trigonometric parallaxes of high mass star forming regions: our view of the Milky Way",
+"licence": "Published research data (facts); no code or imagery reproduced",
+"url": "https://doi.org/10.3847/1538-4357/ab4a11"
+},
+{
+"what": "Galactic bar and boxy/peanut bulge geometry",
+"source": "Wegg, Gerhard & Portail 2015, The structure of the Milky Way's bar outside the bulge",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1093/mnras/stv745"
+},
+{
+"what": "Disc, bulge and halo scale lengths, masses and stellar populations",
+"source": "Bland-Hawthorn & Gerhard 2016, The Galaxy in Context",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1146/annurev-astro-081915-023441"
+},
+{
+"what": "Globular cluster catalogue (positions, distances, magnitudes)",
+"source": "Harris 1996 (2010 edition), A Catalog of Parameters for Globular Clusters in the Milky Way",
+"licence": "Published catalogue data (facts)",
+"url": "https://physics.mcmaster.ca/~harris/mwgc.dat"
+},
+{
+"what": "Deep-sky object catalogue (Messier and Caldwell lists)",
+"source": "Messier catalogue; Caldwell catalogue (Patrick Moore); SEDS/NGC-IC data",
+"licence": "Public catalogue data (facts)",
+"url": "https://seds.org/messier/"
+},
+{
+"what": "Magellanic Cloud positions, distances and extents",
+"source": "Pietrzynski et al. 2019 (LMC); Graczyk et al. 2020 (SMC)",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1038/s41586-019-0999-4"
+},
+{
+"what": "Sgr A* distance and mass",
+"source": "GRAVITY Collaboration 2019, A geometric distance measurement to the Galactic center black hole",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1051/0004-6361/201935656"
+},
+{
+"what": "WebGL rendering library (r170)",
+"source": "three.js",
+"licence": "MIT",
+"url": "https://threejs.org/"
+},
+{
+"what": "Nearby dark cloud positions and extents (Aquila Rift, Cygnus Rift, Coalsack, Taurus, Ophiuchus …)",
+"source": "Dame, Hartmann & Thaddeus 2001, The Milky Way in Molecular Clouds: A New Complete CO Survey",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1086/318388"
+},
+{
+"what": "Dark cloud distances / 3D local dust",
+"source": "Lallement et al. 2019, Gaia-2MASS 3D maps of Galactic interstellar dust within 3 kpc",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1051/0004-6361/201834695"
+},
+{
+"what": "Dark cloud distances",
+"source": "Zucker et al. 2020, A compendium of distances to molecular clouds in the Star Formation Handbook",
+"licence": "Published research data (facts)",
+"url": "https://doi.org/10.1051/0004-6361/201936145"
+},
+{
+"what": "Procedural nebula appearance (M42, M8, M16, Carina, Rosette, Crab, M57, Helix, Pleiades …)",
+"source": "Original procedural shaders for Orion Spur, tuned by eye against published morphology; no third-party imagery used",
+"licence": "Project licence",
+"url": ""
+},
+{
+"what": "Procedural volume, particle and sky rendering",
+"source": "Original work for Orion Spur; no third-party imagery or textures used",
+"licence": "Project licence",
+"url": ""
+}
+]

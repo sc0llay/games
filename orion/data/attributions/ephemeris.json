@@ -1,0 +1,7 @@
+[
+  { "what": "Planet orbital elements (Table 2a/2b, Approximate Positions of the Planets)", "source": "E. M. Standish, JPL Solar System Dynamics", "licence": "Public domain (NASA/JPL)", "url": "https://ssd.jpl.nasa.gov/planets/approx_pos.html" },
+  { "what": "Jupiter/Saturn correction series and moon mean-element fits, fitted to JPL Horizons vectors; validation fixtures", "source": "JPL Horizons System", "licence": "Public domain (NASA/JPL)", "url": "https://ssd.jpl.nasa.gov/horizons/" },
+  { "what": "Lunar theory (truncated ELP2000/MPP02, ch. 47) and Galilean satellites (ch. 44)", "source": "J. Meeus, Astronomical Algorithms, 2nd ed.; Chapront-Touze & Chapront ELP; Lieske E2x3", "licence": "Published algorithms and coefficients", "url": "https://www.willbell.com/math/mc1.htm" },
+  { "what": "Pole and prime-meridian rotation models", "source": "Archinal et al., IAU WGCCRE Report 2015", "licence": "Published scientific data", "url": "https://doi.org/10.1007/s10569-017-9805-5" },
+  { "what": "Dwarf planet osculating elements (Ceres, Vesta, Pluto, Eris, Haumea, Makemake)", "source": "JPL Small-Body Database", "licence": "Public domain (NASA/JPL)", "url": "https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html" }
+]

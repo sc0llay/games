@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+  <title>Orion Spur</title>
+<meta name="color-scheme" content="dark">
+<style>
+  :root { --bg: #000; --fg: #e8ecf2; --dim: #8a93a3; --ha: #ff3b45; --oiii: #2fd6c3; --glass: rgba(14, 17, 24, 0.72); --line: rgba(255,255,255,0.12); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; overscroll-behavior: none; }
+  #scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; outline: none; }
+  #ui { position: fixed; inset: 0; pointer-events: none; }
+  #ui > * { pointer-events: auto; }
+  #poster { position: fixed; inset: 0; background: #000 radial-gradient(ellipse at 50% 55%, #2a2418 0%, #0b0a10 35%, #000 70%); display: grid; place-items: center;
+    font: 500 13px/1.4 system-ui, sans-serif; letter-spacing: .3em; text-transform: uppercase; color: var(--dim); transition: opacity 1s ease; z-index: 50; }
+  #poster.gone { opacity: 0; pointer-events: none; }
+</style>
+<!-- ORION:IMPORTMAP — tools/build.py replaces this block with an inlined map. -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "orion/": "./src/" } }
+</script>
+<!-- /ORION:IMPORTMAP -->
+</head>
+<body>
+<canvas id="scene" tabindex="0" aria-label="3D view of the Milky Way and the Solar System"></canvas>
+<div id="ui"></div>
+<div id="poster" aria-hidden="true">Orion Spur</div>
+<script type="module">import 'orion/main.js';</script>
+</body>
+</html>

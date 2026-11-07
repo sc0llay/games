@@ -1,0 +1,38 @@
+[
+ {
+  "what": "HYG star database v4.1 (positions, magnitudes, colours, names)",
+  "source": "David Nash, astronexus.com; derived from Hipparcos, Yale Bright Star and Gliese catalogues",
+  "licence": "CC BY-SA 4.0 (packed files data/hyg.bin and data/stars-named.json carry the same licence)",
+  "url": "https://github.com/astronexus/HYG-Database"
+ },
+ {
+  "what": "Constellation stick figures (modern sky culture)",
+  "source": "Stellarium project, skycultures/modern",
+  "licence": "GPL-2.0-or-later (data file); figures are traditional",
+  "url": "https://github.com/Stellarium/stellarium"
+ },
+ {
+  "what": "Deep-sky object coordinates, types and magnitudes (Messier, Caldwell, NGC/IC)",
+  "source": "OpenNGC by Mattia Verga",
+  "licence": "CC BY-SA 4.0",
+  "url": "https://github.com/mattiaverga/OpenNGC"
+ },
+ {
+  "what": "Milky Way globular cluster catalogue (2010 edition)",
+  "source": "W. E. Harris 1996, AJ 112, 1487",
+  "licence": "Free for scientific use with citation",
+  "url": "https://physwww.mcmaster.ca/~harris/mwgc.dat"
+ },
+ {
+  "what": "Numbered minor-planet orbital elements (MPCORB)",
+  "source": "IAU Minor Planet Center, Harvard-Smithsonian CfA",
+  "licence": "Free to use with acknowledgement of the MPC",
+  "url": "https://minorplanetcenter.net/iau/MPCORB.html"
+ },
+ {
+  "what": "Deep-sky distances and descriptions",
+  "source": "Compiled by the project from published literature values (approximate)",
+  "licence": "Project data (CC BY-SA 4.0 with the catalogues above)",
+  "url": ""
+ }
+]

@@ -1,0 +1,243 @@
+[
+ {
+  "what": "Earth land/ocean mask (720x360 run-length encoded, drives continents, ocean glint and city placement)",
+  "source": "Natural Earth 1:110m land polygons",
+  "licence": "Public domain",
+  "url": "https://www.naturalearthdata.com/about/terms-of-use/"
+ },
+ {
+  "what": "Procedural planet, moon and dwarf-planet surface textures (GPU, runtime fallback for bodies without photographic maps: Deimos, Mimas, Uranian moons, Titan, Eris, Haumea, Makemake)",
+  "source": "Orion Spur authors",
+  "licence": "Original work",
+  "url": ""
+ },
+ {
+  "what": "Sun photosphere, K-corona (Baumbach 1937 polynomial), prominences, sunspot model",
+  "source": "Orion Spur authors; coronal brightness law after Baumbach (1937)",
+  "licence": "Original work",
+  "url": ""
+ },
+ {
+  "what": "Atmosphere scattering (single-scatter raymarch with Rayleigh/Mie/ozone coefficients)",
+  "source": "Orion Spur authors; coefficients after published Earth atmosphere values (Bruneton & Neyret 2008, Hillaire 2020)",
+  "licence": "Original work",
+  "url": ""
+ },
+ {
+  "what": "Earth day map (from NASA Blue Marble)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_earth_daymap.jpg"
+ },
+ {
+  "what": "Earth night lights (from NASA Black Marble)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_earth_nightmap.jpg"
+ },
+ {
+  "what": "Earth clouds",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_earth_clouds.jpg"
+ },
+ {
+  "what": "Earth normal map",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_earth_normal_map.tif"
+ },
+ {
+  "what": "Earth ocean specular mask",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_earth_specular_map.tif"
+ },
+ {
+  "what": "Moon colour (LROC WAC, CGI Moon Kit)",
+  "source": "NASA Scientific Visualization Studio, Ernie Wright (USRA), Noah Petro (NASA/GSFC); LRO LROC / LOLA",
+  "licence": "Public domain (NASA)",
+  "url": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_8k.tif",
+  "file": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_8k.tif"
+ },
+ {
+  "what": "Moon elevation (LOLA 16 ppd, CGI Moon Kit)",
+  "source": "NASA Scientific Visualization Studio, Ernie Wright (USRA), Noah Petro (NASA/GSFC); LRO LROC / LOLA",
+  "licence": "Public domain (NASA)",
+  "url": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16_uint.tif",
+  "file": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16_uint.tif"
+ },
+ {
+  "what": "Mercury (from MESSENGER MDIS)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_mercury.jpg"
+ },
+ {
+  "what": "Venus cloud deck",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/4k_venus_atmosphere.jpg"
+ },
+ {
+  "what": "Mars (from Viking / MGS)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_mars.jpg"
+ },
+ {
+  "what": "Mars elevation (MOLA, 463 m, sampled every 8th pixel)",
+  "source": "USGS Astrogeology; MGS MOLA Science Team (Smith et al. 2003)",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif"
+ },
+ {
+  "what": "Jupiter (from Cassini 2000 map)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_jupiter.jpg"
+ },
+ {
+  "what": "Saturn",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_saturn.jpg"
+ },
+ {
+  "what": "Saturn ring colour/alpha strip (exported for render/small)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/8k_saturn_ring_alpha.png"
+ },
+ {
+  "what": "Uranus",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/2k_uranus.jpg"
+ },
+ {
+  "what": "Neptune (Voyager 2)",
+  "source": "Solar System Scope (INOVE)",
+  "licence": "CC BY 4.0",
+  "url": "https://www.solarsystemscope.com/textures/",
+  "file": "https://www.solarsystemscope.com/textures/download/2k_neptune.jpg"
+ },
+ {
+  "what": "Io colour mosaic",
+  "source": "USGS Astrogeology Science Center; Galileo SSI / Voyager colour merge, 1 km",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif"
+ },
+ {
+  "what": "Europa mosaic",
+  "source": "USGS Astrogeology Science Center; Voyager / Galileo SSI, 500 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif"
+ },
+ {
+  "what": "Ganymede colour mosaic",
+  "source": "USGS Astrogeology Science Center; Voyager / Galileo SSI colour, 1.4 km",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif"
+ },
+ {
+  "what": "Callisto mosaic",
+  "source": "USGS Astrogeology Science Center; Voyager / Galileo SSI, 1 km",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif"
+ },
+ {
+  "what": "Enceladus mosaic",
+  "source": "USGS Astrogeology Science Center; Cassini ISS, 100 m (Bland et al. 2018)",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Enceladus_Cassini_ISS_Global_Mosaic_100m_HPF.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Enceladus_Cassini_ISS_Global_Mosaic_100m_HPF.tif"
+ },
+ {
+  "what": "Tethys mosaic",
+  "source": "USGS Astrogeology Science Center; Cassini ISS, 293 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Tethys_Cassini_mosaic_global_293m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Tethys_Cassini_mosaic_global_293m.tif"
+ },
+ {
+  "what": "Dione mosaic",
+  "source": "USGS Astrogeology Science Center; Cassini ISS / Voyager, 154 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Dione_Cassini_Voyager_mosaic_global_154m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Dione_Cassini_Voyager_mosaic_global_154m.tif"
+ },
+ {
+  "what": "Rhea mosaic",
+  "source": "USGS Astrogeology Science Center; Cassini ISS / Voyager, 417 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Rhea_Cassini_Voyager_mosaic_global_417m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Rhea_Cassini_Voyager_mosaic_global_417m.tif"
+ },
+ {
+  "what": "Iapetus mosaic",
+  "source": "USGS Astrogeology Science Center; Cassini ISS / Voyager, 783 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Iapetus_Cassini_Voyager_mosaic_global_783m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Iapetus_Cassini_Voyager_mosaic_global_783m.tif"
+ },
+ {
+  "what": "Triton colour mosaic",
+  "source": "USGS Astrogeology Science Center; Voyager 2 colour, 600 m (unimaged areas filled)",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Triton_Voyager2_ClrMosaic_GlobalFill_600m.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Triton_Voyager2_ClrMosaic_GlobalFill_600m.tif"
+ },
+ {
+  "what": "Pluto mosaic",
+  "source": "USGS Astrogeology Science Center; New Horizons LORRI/MVIC, 300 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif"
+ },
+ {
+  "what": "Charon mosaic",
+  "source": "USGS Astrogeology Science Center; New Horizons LORRI/MVIC, 300 m",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif"
+ },
+ {
+  "what": "Ceres mosaic",
+  "source": "USGS Astrogeology Science Center; Dawn FC (DLR), 20 ppd",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif"
+ },
+ {
+  "what": "Vesta mosaic",
+  "source": "USGS Astrogeology Science Center; Dawn FC HAMO, 74 ppd",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif"
+ },
+ {
+  "what": "Phobos mosaic",
+  "source": "USGS Astrogeology Science Center; Mars Express HRSC SRC, 16 ppd",
+  "licence": "Public domain (USGS/NASA)",
+  "url": "https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif",
+  "file": "https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif"
+ }
+]

@@ -1,0 +1,512 @@
+{
+ "version": 1,
+ "bodies": {
+  "uranus": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/uranus/color.jpg"
+   },
+   "mean": [
+    0.3434,
+    0.6214,
+    0.6679
+   ],
+   "scale": 0.8663,
+   "albedo": 0.49
+  },
+  "jupiter": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/jupiter/color.jpg"
+   },
+   "mean": [
+    0.4468,
+    0.4034,
+    0.3499
+   ],
+   "scale": 1.272,
+   "albedo": 0.52,
+   "grsU": 0.3682
+  },
+  "moon": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/moon/color.jpg",
+    "height": "data/textures/moon/height.png"
+   },
+   "mean": [
+    0.3052,
+    0.2985,
+    0.2733
+   ],
+   "scale": 0.4025,
+   "albedo": 0.12,
+   "height": {
+    "offset": 20000,
+    "scaleKm": 0.0005,
+    "w": 5760,
+    "h": 2880
+   }
+  },
+  "earth": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/earth/color.jpg",
+    "night": "data/textures/earth/night.jpg",
+    "clouds": "data/textures/earth/clouds.jpg",
+    "normal": "data/textures/earth/normal.jpg",
+    "spec": "data/textures/earth/spec.png"
+   },
+   "mean": [
+    0.1014,
+    0.116,
+    0.1897
+   ],
+   "scale": 1.1,
+   "albedo": 0.13
+  },
+  "mercury": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/mercury/color.jpg"
+   },
+   "mean": [
+    0.2307,
+    0.2281,
+    0.2286
+   ],
+   "scale": 0.6122,
+   "albedo": 0.14
+  },
+  "venus": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/venus/color.jpg"
+   },
+   "mean": [
+    0.7868,
+    0.5171,
+    0.2198
+   ],
+   "scale": 1.3562,
+   "albedo": 0.75
+  },
+  "mars": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/mars/color.jpg",
+    "height": "data/textures/mars/height.png"
+   },
+   "mean": [
+    0.4723,
+    0.1084,
+    0.0527
+   ],
+   "scale": 0.9355,
+   "albedo": 0.17,
+   "height": {
+    "offset": 32768,
+    "scaleKm": 0.001,
+    "w": 5760,
+    "h": 2880
+   }
+  },
+  "saturn": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/saturn/color.jpg"
+   },
+   "mean": [
+    0.7393,
+    0.5999,
+    0.3918
+   ],
+   "scale": 0.7649,
+   "albedo": 0.47
+  },
+  "neptune": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/neptune/color.jpg"
+   },
+   "mean": [
+    0.0413,
+    0.1122,
+    0.4705
+   ],
+   "scale": 3.5768,
+   "albedo": 0.44
+  },
+  "io": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/io/color.jpg"
+   },
+   "mean": [
+    0.3565,
+    0.2485,
+    0.1133
+   ],
+   "scale": 2.3693,
+   "albedo": 0.62
+  },
+  "europa": {
+   "lon0": 0,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/europa/color.jpg"
+   },
+   "mean": [
+    0.5153,
+    0.5153,
+    0.5153
+   ],
+   "scale": 1.3001,
+   "albedo": 0.67,
+   "tint": [
+    [
+     0.95,
+     0.72,
+     0.52
+    ],
+    [
+     1.02,
+     1.0,
+     0.95
+    ]
+   ]
+  },
+  "ganymede": {
+   "lon0": 0,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/ganymede/color.jpg"
+   },
+   "mean": [
+    0.1891,
+    0.1763,
+    0.1431
+   ],
+   "scale": 2.4345,
+   "albedo": 0.43
+  },
+  "callisto": {
+   "lon0": 0,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/callisto/color.jpg"
+   },
+   "mean": [
+    0.1777,
+    0.1777,
+    0.1777
+   ],
+   "scale": 1.1253,
+   "albedo": 0.2,
+   "tint": [
+    [
+     1.12,
+     0.98,
+     0.8
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "enceladus": {
+   "lon0": 0,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/enceladus/color.jpg"
+   },
+   "mean": [
+    0.4327,
+    0.4327,
+    0.4327
+   ],
+   "scale": 2.1955,
+   "albedo": 0.95,
+   "tint": [
+    [
+     0.92,
+     1.0,
+     1.06
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "tethys": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/tethys/color.jpg"
+   },
+   "mean": [
+    0.3968,
+    0.3968,
+    0.3968
+   ],
+   "scale": 2.0163,
+   "albedo": 0.8,
+   "tint": [
+    [
+     0.98,
+     1.0,
+     1.02
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "dione": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/dione/color.jpg"
+   },
+   "mean": [
+    0.4228,
+    0.4228,
+    0.4228
+   ],
+   "scale": 1.3008,
+   "albedo": 0.55,
+   "tint": [
+    [
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "rhea": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/rhea/color.jpg"
+   },
+   "mean": [
+    0.3568,
+    0.3568,
+    0.3568
+   ],
+   "scale": 1.6817,
+   "albedo": 0.6,
+   "tint": [
+    [
+     1.02,
+     1.0,
+     0.97
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "iapetus": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/iapetus/color.jpg"
+   },
+   "mean": [
+    0.3751,
+    0.3751,
+    0.3751
+   ],
+   "scale": 0.7997,
+   "albedo": 0.3,
+   "tint": [
+    [
+     1.35,
+     0.92,
+     0.62
+    ],
+    [
+     1.02,
+     1.0,
+     0.96
+    ]
+   ]
+  },
+  "triton": {
+   "lon0": -180,
+   "srgb": true,
+   "maps": {
+    "color": "data/textures/triton/color.jpg"
+   },
+   "mean": [
+    0.2147,
+    0.232,
+    0.1634
+   ],
+   "scale": 3.1335,
+   "albedo": 0.7
+  },
+  "pluto": {
+   "lon0": 0,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/pluto/color.jpg"
+   },
+   "mean": [
+    0.3292,
+    0.3292,
+    0.3292
+   ],
+   "scale": 1.5796,
+   "albedo": 0.52,
+   "tint": [
+    [
+     1.45,
+     0.86,
+     0.55
+    ],
+    [
+     1.06,
+     1.0,
+     0.9
+    ]
+   ],
+   "nodata": true
+  },
+  "charon": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/charon/color.jpg"
+   },
+   "mean": [
+    0.4487,
+    0.4487,
+    0.4487
+   ],
+   "scale": 0.8469,
+   "albedo": 0.38,
+   "tint": [
+    [
+     1.1,
+     0.98,
+     0.88
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ],
+   "nodata": true
+  },
+  "ceres": {
+   "lon0": 0,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/ceres/color.jpg"
+   },
+   "mean": [
+    0.4444,
+    0.4444,
+    0.4444
+   ],
+   "scale": 0.2025,
+   "albedo": 0.09,
+   "tint": [
+    [
+     1.0,
+     1.0,
+     1.0
+    ],
+    [
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "vesta": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/vesta/color.jpg"
+   },
+   "mean": [
+    0.2577,
+    0.2577,
+    0.2577
+   ],
+   "scale": 1.4743,
+   "albedo": 0.38,
+   "tint": [
+    [
+     1.05,
+     1.0,
+     0.92
+    ],
+    [
+     1.03,
+     1.0,
+     0.95
+    ]
+   ]
+  },
+  "phobos": {
+   "lon0": -180,
+   "srgb": false,
+   "maps": {
+    "color": "data/textures/phobos/color.jpg"
+   },
+   "mean": [
+    0.526,
+    0.526,
+    0.526
+   ],
+   "scale": 0.1331,
+   "albedo": 0.07,
+   "tint": [
+    [
+     1.06,
+     1.0,
+     0.92
+    ],
+    [
+     1.04,
+     1.0,
+     0.94
+    ]
+   ]
+  }
+ },
+ "saturnRing": {
+  "path": "data/textures/saturn/ring.png",
+  "innerKm": 74500,
+  "outerKm": 140220,
+  "note": "RGBA radial strip (inner \u2192 outer); not used by bodies, offered to render/small"
+ }
+}

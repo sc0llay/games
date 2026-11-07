@@ -1,0 +1,6 @@
+[
+  {"what": "Comet and near-Earth asteroid orbital elements (Halley, Hale-Bopp, 67P, Bennu, Eros)", "source": "NASA/JPL Small-Body Database", "licence": "Public domain (US Government work)", "url": "https://ssd.jpl.nasa.gov/sbdb.cgi"},
+  {"what": "Main-belt and Trojan asteroid catalogue (data/asteroids.bin)", "source": "Minor Planet Center / JPL SBDB orbital elements", "licence": "Public data, free use with attribution", "url": "https://minorplanetcenter.net/"},
+  {"what": "Saturn, Jupiter, Uranus and Neptune ring optical-depth profiles (procedurally rebuilt from published radii)", "source": "Cassini RSS/VIMS/UVIS occultation literature (Colwell et al. 2009; Tiscareno 2013; French et al.)", "licence": "Published scientific results; no imagery used", "url": "https://pds-rings.seti.org/"},
+  {"what": "Procedural Trojans, Kuiper belt, Oort shell and asteroid meshes", "source": "Generated in code", "licence": "Project licence", "url": ""}
+]
