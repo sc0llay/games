@@ -1400,6 +1400,7 @@ __def("js/sim/aircraft.js", function () {
 // Aircraft flight model + pilot. One instance per flight; stepped at the world's fixed timestep.
 const { AIRCRAFT_TYPES } = __m("js/data/aircraft.js");
 const { casToTas, casToMach, machToCas } = __m("js/core/atmos.js");
+const { mvaAt } = __m("js/sim/airport.js");
 const { DEG, FT_PER_NM, angleDiff, bearing, clamp, dist, hdgVec, lerp, norm360, trackErrors } = __m("js/core/geo.js");
 const ROLL_ACCEL = 1.4;   // deg/s² change in turn rate (roll-in lag)
 const VS_ACCEL = 450;     // fpm per second change in vertical speed
@@ -1496,9 +1497,21 @@ class Aircraft {
         case 'MACH': this.clr.mach = c.v; this.clr.spd = null; break;
         case 'SN': this.clr.spd = null; this.clr.mach = null; break;
         case 'DCT': {
-          this.nav.mode = 'DCT'; this.nav.fix = c.fix; this.clr.hdg = null; this.nav.hold = null;
+          this.nav.mode = 'DCT'; this.nav.fix = c.fix; this.clr.hdg = null; this.nav.hold = null; this.nav.resume = false;
           const idx = this.route.indexOf(c.fix);
           if (idx >= 0) { this.route = this.route.slice(idx); this.nav.mode = 'ROUTE'; }
+          break;
+        }
+        case 'PATH': {  // free-hand track drawn on the top-down view
+          if (this.app && this.app.state !== 'ARMED') break;  // established: keeps flying the approach
+          this.nav.mode = 'PATH'; this.nav.path = c.pts.map(p => [p[0], p[1]]); this.nav.pathPrev = [this.x, this.y];
+          this.nav.pathEnd = c.fix || null; this.nav.pathDesc = null; this.clr.hdg = null; this.clr.turnDir = null; this.nav.hold = null; this.app = null;
+          if (c.rwy) {  // ends on a runway: vectors to the ILS (captured as the track meets the localiser) and landing clearance
+            const end = ap.ends[c.rwy], ifAlt = end.if?.alt || 4000;
+            this.app = { rwy: c.rwy, end, state: 'ARMED', viaIF: false };
+            this.clr.landing = true; this.clr.expect = c.rwy; this.stableChecked = false; this.minimaChecked = false;
+            this.nav.pathDesc = ifAlt;  // descends towards the platform altitude as the terrain along the track allows
+          }
           break;
         }
         case 'HOLD': {
@@ -1628,6 +1641,9 @@ class Aircraft {
         const idx = this.route.indexOf(f.name);
         if (idx >= 0 && idx < this.route.length - 1) { this.route = this.route.slice(idx + 1); this.nav.mode = 'ROUTE'; return this.lateral(dt); }
         if (this.kind === 'ARR' && this.ap.holds[f.name]) { this.apply([{ t: 'HOLD', fix: f.name }]); return this.hdg; }
+        if (this.nav.resume && this.kind !== 'ARR' && this.route.length) {  // drawn track ended on an off-route fix: own navigation to the exit
+          this.nav.resume = false; this.route = this.route.slice(-1); this.nav.mode = 'ROUTE'; return this.lateral(dt);
+        }
         this.nav.mode = 'HDG'; this.clr.hdg = this.hdg; return this.hdg;
       }
       return this.steerToFix(f.x, f.y);
@@ -1664,6 +1680,43 @@ class Aircraft {
       return this.steerToFix(f.x, f.y);
     }
     if (m === 'HOLD') return this.holdGuidance(dt);
+    if (m === 'PATH') {
+      const path = this.nav.path || [];
+      if (this.initialClimb) {
+        if (this.alt - ap.elev < 1100) return this.depHdg ?? this.hdg;
+        this.initialClimb = false; this.nav.pathPrev = [this.x, this.y];
+        // whatever was drawn along the runway is behind us now
+        while (path.length > 1 && Math.abs(angleDiff(this.track, bearing(this.x, this.y, path[0][0], path[0][1]))) > 90) path.shift();
+      }
+      while (path.length) {
+        const [qx, qy] = path[0], pv = this.nav.pathPrev;
+        let lead = 0.4;
+        if (path.length > 1) {
+          const delta = Math.abs(angleDiff(bearing(this.x, this.y, qx, qy), bearing(qx, qy, path[1][0], path[1][1])));
+          lead = clamp(this.turnRadius() * Math.tan(Math.min(delta, 120) * DEG / 2), 0.4, 3);
+        }
+        // reached, or gone past abeam (a turn tighter than the aircraft can fly is cut, never circled back to)
+        const abeam = (this.x - qx) * (qx - pv[0]) + (this.y - qy) * (qy - pv[1]) > 0;
+        if (dist(this.x, this.y, qx, qy) > lead && !abeam) break;
+        this.nav.pathPrev = path.shift();
+      }
+      if (this.nav.pathDesc != null && this.app && this.clr.alt > this.nav.pathDesc) {
+        let floor = Math.max(this.nav.pathDesc, mvaAt(ap, this.x, this.y)), px = this.x, py = this.y, d = 0;
+        for (const q of path) { d += dist(px, py, q[0], q[1]); if (d <= 10) floor = Math.max(floor, mvaAt(ap, q[0], q[1])); px = q[0]; py = q[1]; }
+        // top of descent: stays high until the track miles left call for it
+        if (floor < this.clr.alt && d < (this.clr.alt - this.nav.pathDesc) / 250 + 8) this.clr.alt = floor;
+      }
+      if (path.length) return this.steerToFix(path[0][0], path[0][1]);
+      // end of the drawn track
+      this.nav.path = null;
+      const fix = this.nav.pathEnd; this.nav.pathEnd = null;
+      if (fix && ap.fixes[fix]) { this.apply([{ t: 'DCT', fix }]); this.nav.resume = true; return this.lateral(dt); }
+      if (this.app && this.app.state === 'ARMED' && this.app.end.if) {  // never met the localiser: reposition via the procedure
+        this.app.viaIF = true; this.nav.mode = 'DCT'; this.nav.fix = this.app.end.if.name; return this.lateral(dt);
+      }
+      if (this.kind !== 'ARR' && this.route.length) { this.nav.mode = 'ROUTE'; return this.lateral(dt); }
+      this.nav.mode = 'HDG'; this.clr.hdg = this.hdg; return this.hdg;
+    }
     return this.hdg;
   }
 
@@ -1765,7 +1818,7 @@ class Aircraft {
     const d = this.distToThr();
     const e = this.app.end;
     if (this.app.state === 'ARMED') {
-      if (this.app.viaIF) return;
+      if (this.app.viaIF || this.nav.mode === 'PATH') return;  // a drawn track may start behind the threshold and come round
       // flew through the localiser without capture
       const te = trackErrors(this.x, this.y, e.thrX, e.thrY, e.hdg);
       if (te.along > -1) { this.app = null; w.onEvent(this, 'LOCMISS'); }
@@ -1810,7 +1863,7 @@ class Aircraft {
     this.gs = Math.hypot(this.vx, this.vy); this.track = this.hdg;
     if (this.ias >= p.vr) {
       this.phase = 'AIR'; this.vs = Math.min(1500, this.climbRate()); this.alt = this.ap.elev + 20;
-      this.initialClimb = true; this.depHdg = this.hdg; this.nav.mode = 'ROUTE';
+      this.initialClimb = true; this.depHdg = this.hdg; if (this.nav.mode !== 'PATH') this.nav.mode = 'ROUTE';
       this.world.onAirborne(this);
     }
   }
@@ -2368,6 +2421,11 @@ function readback(ac, cmds, ap, qnh) {
       }
       case 'SN': disp.push('normal speed'); say.push('resume normal speed'); break;
       case 'DCT': disp.push(`direct ${c.fix}`); say.push(`direct ${c.fix.toLowerCase()}`); break;
+      case 'PATH':
+        if (c.rwy) { disp.push(`drawn track, ILS ${c.rwy}, cleared to land`); say.push(`vectors ILS ${spokenRwy(c.rwy)}, cleared to land`); }
+        else if (c.fix) { disp.push(`drawn track to ${c.fix}`); say.push(`routing as cleared to ${c.fix.toLowerCase()}`); }
+        else { disp.push('drawn track'); say.push('routing as cleared'); }
+        break;
       case 'HOLD': disp.push(`hold at ${c.fix}`); say.push(`hold at ${c.fix.toLowerCase()}`); break;
       case 'ILS': disp.push(`cleared ILS ${c.rwy}`); say.push(`cleared ILS approach ${spokenRwy(c.rwy)}`); break;
       case 'EXP': disp.push(`expect ILS ${c.rwy}`); say.push(`expect ILS ${spokenRwy(c.rwy)}`); break;
@@ -2403,6 +2461,7 @@ function instruction(ac, cmds, ap, qnh) {
       case 'MACH': { const [w, fr] = c.v.toFixed(2).split('.'); say.push(`Mach ${w === '0' ? '' : digits(w) + ' '}point ${digits(fr.replace(/0$/, '') || '0')}`); break; }
       case 'SN': say.push('resume normal speed'); break;
       case 'DCT': say.push(`proceed direct ${c.fix.toLowerCase()}`); break;
+      case 'PATH': say.push(c.rwy ? `vectors for the ILS ${spokenRwy(c.rwy)}, cleared to land` : c.fix ? `route as cleared to ${c.fix.toLowerCase()}` : 'route as cleared'); break;
       case 'HOLD': say.push(`hold at ${c.fix.toLowerCase()}, as published`); break;
       case 'ILS': say.push(`cleared ILS approach ${spokenRwy(c.rwy || ac.app?.rwy || '')}`); break;
       case 'EXP': say.push(`expect ILS approach ${spokenRwy(c.rwy)}`); break;
@@ -2555,13 +2614,13 @@ class Assist {
       this.say(`${ac.callsign}: you have its ${label} now; I'll leave that with you.`);
     };
     for (const c of cmds) {
-      if (['HDG', 'TURN', 'DCT', 'HOLD', 'ILS', 'RES'].includes(c.t)) {
+      if (['HDG', 'TURN', 'DCT', 'HOLD', 'ILS', 'RES', 'PATH'].includes(c.t)) {
         if (ac.kind === 'ARR') take('lat', 'approach', 'vectors'); else o.manual.lat = true;
         o.by.lat = 'user';
       }
       if (c.t === 'ALT') { take('vert', ac.kind === 'ARR' ? 'descent' : ac.kind === 'DEP' ? 'climb' : 'separation', 'level'); o.by.vert = 'user'; }
       if (['SPD', 'MACH', 'SN'].includes(c.t) && ac.kind === 'ARR') take('spd', 'approach', 'speed');
-      if (c.t === 'CL') o.by.cl = 'user';
+      if (c.t === 'CL' || (c.t === 'PATH' && c.rwy)) o.by.cl = 'user';
       if (c.t === 'HO') o.by.ho = 'user';
       if (c.t === 'REL' && ac.strip.state === 'PENDING') {
         o.by.rel = 'user';
@@ -3536,7 +3595,7 @@ __def("js/sim/world.js", function () {
 // The simulation world: owns aircraft, weather, runways, traffic flow, events, safety nets and scoring.
 // Advanced only through step(dt) at a fixed timestep, so a given seed + inputs replays identically.
 const { RNG } = __m("js/core/rng.js");
-const { dist, hdgVec, norm360, angleDiff, bearing } = __m("js/core/geo.js");
+const { dist, hdgVec, norm360, angleDiff, bearing, trackErrors } = __m("js/core/geo.js");
 const { loadAirport } = __m("js/sim/airport.js");
 const { Weather } = __m("js/sim/weather.js");
 const { Aircraft } = __m("js/sim/aircraft.js");
@@ -3701,6 +3760,70 @@ class World {
     return res;
   }
 
+  // ---------- drawn routes (top-down view) ----------
+  // Turns a free-hand track into a flyable one: thins the points and works out what it ends on — a runway (ILS and
+  // landing clearance), a fix (direct, rejoining the route if the fix is on it) or open air. tol = snap radius in nm.
+  planPath(ac, raw, tol = 0.6) {
+    const ap = this.ap, step = Math.max(0.5, tol * 0.6), last = raw[raw.length - 1];
+    const out = { pts: [], len: 0, rwy: null, fix: null, via: null, warn: null };
+    if (!last) return out;
+    let end = null;
+    if (ac.kind === 'ARR' && ac.phase === 'AIR') {
+      // arriving direction: from ~1.5 nm back along the drawing
+      let from = [ac.x, ac.y];
+      for (let i = raw.length - 2; i >= 0; i--) if (dist(raw[i][0], raw[i][1], last[0], last[1]) > 1.5) { from = raw[i]; break; }
+      const dirIn = bearing(from[0], from[1], last[0], last[1]);
+      let best = 70;
+      for (const e of Object.values(ap.ends)) {
+        const te = trackErrors(last[0], last[1], e.thrX, e.thrY, e.hdg);
+        if (te.along < -tol || te.along > e.runway.length + tol || Math.abs(te.cross) > Math.max(tol, 0.3)) continue;
+        const off = Math.abs(angleDiff(dirIn, e.hdg));
+        if (off < best && !this.validate(ac, { t: 'ILS', rwy: e.id })) { best = off; end = e; }
+      }
+    }
+    let px = ac.x, py = ac.y;
+    for (const p of raw) if (dist(px, py, p[0], p[1]) >= step) { out.pts.push([p[0], p[1]]); px = p[0]; py = p[1]; }
+    if (end) {
+      out.rwy = end.id;
+      const te = p => trackErrors(p[0], p[1], end.thrX, end.thrY, end.hdg);
+      while (out.pts.length && te(out.pts[out.pts.length - 1]).along > -1.5) out.pts.pop();
+      // does the track meet the localiser where it can be captured?
+      let prev = [ac.x, ac.y], joins = false;
+      for (const p of out.pts) {
+        const a = te(prev), b = te(p);
+        if (b.along > -end.ils.locRange && b.along < -1.5 && (Math.abs(b.cross) < 0.3 || Math.sign(a.cross) !== Math.sign(b.cross))
+          && Math.abs(angleDiff(bearing(prev[0], prev[1], p[0], p[1]), end.hdg)) < 90) joins = true;
+        prev = p;
+      }
+      if (!joins) out.via = end.if?.name || null;
+    } else {
+      let bd = tol;
+      for (const fx of Object.values(ap.fixes)) { const d = dist(last[0], last[1], fx.x, fx.y); if (d < bd) { bd = d; out.fix = fx.name; } }
+      if (out.fix) { const fx = ap.fixes[out.fix]; while (out.pts.length && dist(out.pts[out.pts.length - 1][0], out.pts[out.pts.length - 1][1], fx.x, fx.y) < step) out.pts.pop(); }
+    }
+    px = ac.x; py = ac.y;
+    for (const p of out.pts) { out.len += dist(px, py, p[0], p[1]); px = p[0]; py = p[1]; }
+    if (end) {
+      out.len += dist(px, py, end.thrX, end.thrY);
+      const need = (ac.alt - ap.elev) / 318;  // track miles for a 3° descent
+      if (out.len < need * 0.8) out.warn = `too high — needs ${Math.ceil(need)} nm to descend`;
+    } else if (out.fix) out.len += dist(px, py, ap.fixes[out.fix].x, ap.fixes[out.fix].y);
+    return out;
+  }
+
+  drawPath(ac, raw, tol) {
+    const pl = this.planPath(ac, raw, tol);
+    if (!pl.pts.length && !pl.fix && !pl.rwy) return { ok: false, errors: ['Track too short — drag further'] };
+    const cmds = [{ t: 'PATH', pts: pl.pts, rwy: pl.rwy, fix: pl.fix }];
+    const why = this.validate(ac, cmds[0]);
+    if (why) return { ok: false, errors: [`${ac.callsign}: ${why}`] };
+    if (ac.kind === 'DEP' && ac.phase === 'HOLDING_POINT' && ac.strip.state === 'PENDING') cmds.push({ t: 'REL' });
+    const text = pl.rwy ? `FLY DRAWN TRACK, ILS ${pl.rwy}, CLEARED TO LAND` : pl.fix ? `FLY DRAWN TRACK TO ${pl.fix}` : 'FLY DRAWN TRACK';
+    this.dispatch(ac, cmds, text);
+    this.assist?.onUserCommand(ac, cmds);
+    return { ok: true, plan: pl };
+  }
+
   find(id) { return this.aircraft.find(a => a.id === id); }
   find1(cs) { return this.aircraft.find(a => a.callsign === cs); }
 
@@ -3783,6 +3906,10 @@ class World {
         if (p.glider && c.v > ac.alt + 100) return 'no engine, unable to climb';
         return null;
       case 'HOLD': return p.glider ? 'unpowered, unable to hold' : null;
+      case 'PATH':
+        if (ac.app && ac.app.state !== 'ARMED') return 'established on the approach';
+        if (ac.phase !== 'AIR' && !(ac.kind === 'DEP' && ['HOLDING_POINT', 'LINEUP'].includes(ac.phase))) return 'unable on the ground';
+        return c.rwy ? this.validate(ac, { t: 'ILS', rwy: c.rwy }) : null;
       case 'ILS': {
         const e = ap.ends[c.rwy];
         if (!e.ils) return `no ILS runway ${c.rwy}`;
@@ -4168,6 +4295,7 @@ class World {
     else {
       const iff = end.if || { x: end.thrX, y: end.thrY };
       let px = ac.x, py = ac.y; d = 0;
+      if (ac.nav.mode === 'PATH') for (const q of ac.nav.path || []) { d += dist(px, py, q[0], q[1]); px = q[0]; py = q[1]; }
       if (ac.nav.mode === 'ROUTE') for (const f of ac.route) { const p = this.ap.fixes[f]; d += dist(px, py, p.x, p.y); px = p.x; py = p.y; }
       d += dist(px, py, iff.x, iff.y) + dist(iff.x, iff.y, end.thrX, end.thrY);
       if (ac.nav.mode === 'HOLD') d += 4;
@@ -5229,6 +5357,11 @@ class Radar {
         let prev = p;
         const route = sel.nav.mode === 'DCT' ? [sel.nav.fix] : sel.route;
         for (const fx of route) { const q = ap.fixes[fx]; if (!q) continue; L.seg(prev[0], prev[1], q.x, q.y, [P.sel[0], P.sel[1], P.sel[2], 0.45], 1.2, 8); prev = [q.x, q.y]; }
+      }
+      if (sel.nav.mode === 'PATH' && sel.nav.path) {
+        let prev = p;
+        for (const q of sel.nav.path) { L.seg(prev[0], prev[1], q[0], q[1], [P.sel[0], P.sel[1], P.sel[2], 0.6], 1.6); prev = q; }
+        const q = ap.fixes[sel.nav.pathEnd]; if (q) L.seg(prev[0], prev[1], q.x, q.y, [P.sel[0], P.sel[1], P.sel[2], 0.6], 1.6);
       }
       if (sel.nav.mode === 'HDG' && sel.clr.hdg != null) {
         const [ux, uy] = hdgVec(sel.clr.hdg);
@@ -22497,6 +22630,7 @@ const { buildScene, runwayPaint, runwayWear, geomFor, gyFlags, liveryFor } = __m
 const { HD } = __m("js/render/models/index.js");
 const { DEG, hdgVec, clamp, lerp, FT_PER_NM } = __m("js/core/geo.js");
 const FT = 1 / FT_PER_NM;
+const TOP_FOV = 12 * DEG;
 const STRIDE = 17;
 
 // ---------- tiny mat4 helpers (column-major) ----------
@@ -23131,7 +23265,7 @@ function meshLibrary() {
 const C_RED = [1, 0.1, 0.06], C_GRN = [0.15, 1, 0.3], C_WHT = [1, 1, 1], C_LAND = [1, 0.96, 0.85], C_AMB = [1, 0.62, 0.1];
 
 const PRESETS = [['arr', 'ARR', 'Arrival end and final approach'], ['final', 'FINAL', 'Three-mile final, zoomed'], ['rwy', 'RWY', 'Whole runway'],
-  ['dep', 'DEP', 'Departure end and holding point'], ['apron', 'APRON', 'Terminal apron'], ['follow', 'FOLLOW', 'Follow the selected aircraft'],
+  ['dep', 'DEP', 'Departure end and holding point'], ['apron', 'APRON', 'Terminal apron'], ['top', 'TOP', 'Top-down view: drag from an aircraft to draw its route'], ['follow', 'FOLLOW', 'Follow the selected aircraft'],
   ['binos', 'BINOS', 'Binoculars (8° field of view)'], ['frame', 'FRAME', 'Show or hide the cab window frame']];
 
 class Tower {
@@ -23162,6 +23296,7 @@ class Tower {
     this.tYaw = 0; this.tPitch = 0; this.tFov = 50 * DEG;
     this.preset = 'arr'; this.binos = false; this.showFrame = true; this.needAim = true;
     this.screen = new Map();
+    this.top = { x: 0, y: 0, span: 14 };   // top-down view: centre (nm) and half-height (nm)
     this.w = this.h = 1; this.dpr = 1;
     this.lost = false; this.lastNow = 0; this.lastSimT = -1;
     this.track = new Map(); this.ghosts = []; this.lineups = new Map();
@@ -23267,7 +23402,7 @@ class Tower {
     this.lightS.n = S.lights.length / 12;
     this.pools = new Float32Array(48); S.pools.slice(0, 16).forEach((p, i) => this.pools.set(p, i * 3));
     this.ghosts = []; this.track.clear(); this.lineups.clear();
-    this.needAim = true;
+    this.needAim = true; this.top = { x: 0, y: 0, span: 14 };
   }
 
   // ---------- view presets bar ----------
@@ -23293,6 +23428,7 @@ class Tower {
     if (id === 'binos') { this.binos = !this.binos; this.tFov = this.binos ? 8 * DEG : this.presetFov ?? 50 * DEG; if (!this.binos) this.needAim = true; }
     else if (id === 'frame') this.showFrame = !this.showFrame;
     else { this.preset = id; this.binos = false; this.needAim = true; }
+    if (this.preset === 'top') { this.binos = false; this.tFov = this.presetFov ?? 50 * DEG; }
     this.syncBar();
   }
 
@@ -23400,7 +23536,7 @@ class Tower {
       if (a.phase === 'GONE') continue;
       seen.add(a.id);
       const x = a.px + (a.x - a.px) * al, y = a.py + (a.y - a.py) * al;
-      if (Math.hypot(x - S.eye[0], y - S.eye[1]) > 45) continue;
+      if (this.preset === 'top' ? Math.hypot(x - this.top.x, y - this.top.y) > this.top.span * 3 + 10 : Math.hypot(x - S.eye[0], y - S.eye[1]) > 45) continue;
       let hdg = a.phdg + ((((a.hdg - a.phdg) % 360) + 540) % 360 - 180) * al;
       let e = { a, x, y, hFt: Math.max(S.elev, a.palt + (a.alt - a.palt) * al), hdg, pitch: 0, bank: 0, ground: a.phase !== 'AIR' };
       const prev = this.track.get(a.id);
@@ -23574,16 +23710,24 @@ class Tower {
     if (this.preset === 'follow') { if (f.selectedId != null) this.followId = f.selectedId; if (this.followId == null || !posOf(this.followId)) { this.preset = 'arr'; this.needAim = true; this.syncBar(); } }
     this.updateCamera(world, dt, posOf);
 
-    const eye = [S.eye[0], S.eye[2] * FT, -S.eye[1]];
-    const dir = [Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch)];
     const W = this.canvas.width, H = this.canvas.height;
-    const proj = perspective(this.fov, W / H, 0.025, 160);
-    const view = lookAt(eye, [eye[0] + dir[0], eye[1] + dir[1], eye[2] + dir[2]], [0, 1, 0]);
+    const top = this.preset === 'top';
+    let eye = [S.eye[0], S.eye[2] * FT, -S.eye[1]];
+    let dir = [Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch)];
+    let up = [0, 1, 0], fov = this.fov, near = 0.025, far = 160;
+    if (top) {  // a long lens from high overhead, north up: flat enough that screen <-> ground is linear
+      fov = TOP_FOV; const hgt = this.top.span / Math.tan(fov / 2);
+      eye = [this.top.x, S.elev * FT + hgt, -this.top.y]; dir = [0, -1, 0]; up = [0, 0, -1];
+      near = hgt * 0.4; far = hgt * 1.6 + 5;
+      E.fog = Math.min(E.fog, 0.1 / hgt); E.haze = 0; E.cover = 0; E.rain = 0;
+    }
+    const proj = perspective(fov, W / H, near, far);
+    const view = lookAt(eye, [eye[0] + dir[0], eye[1] + dir[1], eye[2] + dir[2]], up);
     const vp = mul(proj, view);
     this.vp = vp;
-    const inv = invert(mul(proj, lookAt([0, 0, 0], dir, [0, 1, 0])));
-    const pxPerRad = (H / 2) / Math.tan(this.fov / 2);   // device px per unit tangent
-    const minPx = 2 * Math.tan(this.fov / 2) / H * 7 * this.dpr;
+    const inv = invert(mul(proj, lookAt([0, 0, 0], dir, up)));
+    const pxPerRad = (H / 2) / Math.tan(fov / 2);   // device px per unit tangent
+    const minPx = 2 * Math.tan(fov / 2) / H * (top ? 30 : 7) * this.dpr;
 
     // ----- dynamic instances and lights -----
     for (const m of Object.values(this.meshes)) { m.count = 0; m.ground = 0; }
@@ -23760,7 +23904,7 @@ class Tower {
     }
     gl.disable(gl.BLEND); gl.bindVertexArray(null);
 
-    if (ctx2d) { if (this.showFrame) this.drawFrame(ctx2d, E); this.drawLabels(f, ctx2d, E); }
+    if (ctx2d) { if (top) this.drawTop(f, ctx2d); else if (this.showFrame) this.drawFrame(ctx2d, E); this.drawLabels(f, ctx2d, E); }
   }
 
   // ---------- 2D overlay ----------
@@ -23808,26 +23952,103 @@ class Tower {
     c.textAlign = 'left'; c.textBaseline = 'top'; c.fillStyle = 'rgba(220,235,255,.85)';
     c.font = `${Math.round(11 * ui)}px "Plex Mono", ui-monospace, monospace`;
     const lbl = PRESETS.find(q => q[0] === this.preset)?.[1] || 'FREE';
-    c.fillText(`TWR ${world.ap.id} · ARR ${rc.arr} DEP ${rc.dep} · looking ${String(hdg).padStart(3, '0')}° · FOV ${Math.round(this.fov / DEG)}° · ${this.binos ? 'BINOS' : lbl}`, 10, 10);
+    const isTop = this.preset === 'top';
+    c.fillText(isTop ? `TWR ${world.ap.id} · ARR ${rc.arr} DEP ${rc.dep} · TOP · north up · ${Math.round(this.top.span * 2)} nm`
+      : `TWR ${world.ap.id} · ARR ${rc.arr} DEP ${rc.dep} · looking ${String(hdg).padStart(3, '0')}° · FOV ${Math.round(this.fov / DEG)}° · ${this.binos ? 'BINOS' : lbl}`, 10, 10);
     c.fillStyle = 'rgba(220,235,255,.55)';
-    c.fillText('drag to look · wheel to zoom · click to select · Home resets · F2 radar', 10, 10 + 15 * ui);
+    c.fillText(isTop ? 'drag from an aircraft to draw its route' : 'drag to look · wheel to zoom · click to select · Home resets · F2 radar', 10, 10 + 15 * ui);
+    if (isTop) { c.fillText('end on a runway to land · on a fix to go direct', 10, 10 + 30 * ui); c.fillText('drag map to pan · wheel to zoom · Home resets', 10, 10 + 45 * ui); }
     c.restore();
   }
 
   // ---------- input ----------
+  // top-down view: ground position <-> overlay pixel, and the snap radius (24 px) in nm
+  toWorld(sx, sy) { const T = this.top, k = T.span / (this.h / 2); return [T.x + (sx - this.w / 2) * k, T.y - (sy - this.h / 2) * k]; }
+  toScreen(x, y) { const T = this.top, k = T.span / (this.h / 2); return [this.w / 2 + (x - T.x) / k, this.h / 2 - (y - T.y) / k]; }
+  snapTol() { return Math.max(0.4, 24 * this.top.span / (this.h / 2)); }
+  drawTop(f, c) {
+    const world = f.world, ap = world.ap, ui = f.ui || 1, rc = world.runwayConfig;
+    const P = (x, y) => this.toScreen(x, y), on = p => p[0] > -40 && p[0] < this.w + 40 && p[1] > -40 && p[1] < this.h + 40;
+    const line = (pts, col, w, dash) => {
+      if (pts.length < 2) return;
+      c.strokeStyle = col; c.lineWidth = w; c.setLineDash(dash || []); c.beginPath();
+      pts.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); c.stroke(); c.setLineDash([]);
+    };
+    c.save();
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    c.shadowColor = 'rgba(0,0,0,.75)'; c.shadowBlur = 3;
+    c.font = `${Math.round(10 * ui)}px "Plex Mono", ui-monospace, monospace`; c.textBaseline = 'middle';
+    // extended centrelines of the ILS runways, with the capture fix at the far end
+    for (const e of Object.values(ap.ends)) {
+      if (!e.ils || e.runway.closed) continue;
+      const act = [].concat(rc.arr).includes(e.id), [ux, uy] = hdgVec(e.hdg), d = e.if ? Math.hypot(e.if.x - e.thrX, e.if.y - e.thrY) : 10;
+      const a = P(e.thrX, e.thrY), b = P(e.thrX - ux * d, e.thrY - uy * d);
+      line([a, b], act ? 'rgba(120,255,170,.8)' : 'rgba(220,235,255,.3)', act ? 1.6 : 1, [10, 7]);
+      if (act) for (let n = 2; n < d; n += 2) { const q = P(e.thrX - ux * n, e.thrY - uy * n), t = 4; line([[q[0] - uy * t, q[1] - ux * t], [q[0] + uy * t, q[1] + ux * t]], 'rgba(120,255,170,.8)', 1.2); }
+      c.fillStyle = act ? 'rgba(150,255,190,.95)' : 'rgba(220,235,255,.5)'; c.textAlign = 'center';
+      c.fillText(e.id, b[0] - ux * 14, b[1] + uy * 14);
+    }
+    // fixes
+    c.textAlign = 'left';
+    for (const fx of Object.values(ap.fixes)) {
+      const p = P(fx.x, fx.y); if (!on(p)) continue;
+      c.strokeStyle = 'rgba(225,238,255,.8)'; c.lineWidth = 1.2; c.beginPath();
+      c.moveTo(p[0], p[1] - 5); c.lineTo(p[0] + 4.5, p[1] + 3.5); c.lineTo(p[0] - 4.5, p[1] + 3.5); c.closePath(); c.stroke();
+      c.fillStyle = 'rgba(225,238,255,.8)'; c.fillText(fx.name, p[0] + 8, p[1]);
+    }
+    // tracks: drawn routes for everyone, the published route for the selected aircraft
+    const acPt = a => { const s = this.screen.get(a.id); return s ? [s[0], s[1]] : P(a.x, a.y); };
+    for (const a of world.aircraft) {
+      if (a.phase === 'GONE') continue;
+      const sel = f.selectedId === a.id, pts = [acPt(a)];
+      if (a.nav.mode === 'PATH' && a.nav.path) {
+        for (const q of a.nav.path) pts.push(P(q[0], q[1]));
+        const fx = a.nav.pathEnd && ap.fixes[a.nav.pathEnd];
+        if (a.app) pts.push(P(a.app.end.thrX, a.app.end.thrY)); else if (fx) pts.push(P(fx.x, fx.y));
+        line(pts, sel ? 'rgba(255,210,74,.95)' : a.app ? 'rgba(120,255,170,.6)' : 'rgba(140,215,255,.6)', sel ? 2.4 : 1.8);
+      } else if (sel && a.phase === 'AIR') {
+        if (a.app && a.app.state !== 'ARMED') pts.push(P(a.app.end.thrX, a.app.end.thrY));
+        else for (const n of a.nav.mode === 'DCT' ? [a.nav.fix] : a.nav.mode === 'ROUTE' ? a.route : []) { const q = ap.fixes[n]; if (q) pts.push(P(q.x, q.y)); }
+        line(pts, 'rgba(255,210,74,.7)', 1.6, [7, 6]);
+      }
+    }
+    // the route being drawn
+    const pd = f.pathDraw, pa = pd && world.find(pd.id);
+    if (pa && pd.raw.length) {
+      const pl = pd.plan, bad = !!pl.warn, col = bad ? '#ff8a5a' : pl.rwy ? '#7dffb0' : pl.fix ? '#8fd8ff' : '#ffffff';
+      const pts = [acPt(pa), ...pl.pts.map(q => P(q[0], q[1]))];
+      let endPt = P(...pd.raw[pd.raw.length - 1]);
+      if (pl.rwy) endPt = P(ap.ends[pl.rwy].thrX, ap.ends[pl.rwy].thrY); else if (pl.fix) endPt = P(ap.fixes[pl.fix].x, ap.fixes[pl.fix].y);
+      pts.push(endPt);
+      line(pts, col, 3);
+      c.fillStyle = col; c.beginPath(); c.arc(endPt[0], endPt[1], pl.rwy || pl.fix ? 7 : 4, 0, 7); c.fill();
+      const txt = pl.rwy ? `ILS ${pl.rwy} · cleared to land${pl.via ? ` · via ${pl.via}` : ''}` : pl.fix ? `direct ${pl.fix}` : 'then present heading';
+      c.font = `600 ${Math.round(12 * ui)}px "Plex Mono", ui-monospace, monospace`; c.textAlign = 'left';
+      c.fillText(`${pa.callsign} · ${pl.len.toFixed(0)} nm · ${txt}`, endPt[0] + 14, endPt[1] - 8 * ui);
+      if (pl.warn) c.fillText(pl.warn, endPt[0] + 14, endPt[1] + 8 * ui);
+    }
+    c.restore();
+  }
   look(dx, dy) {
+    if (this.preset === 'top') { const T = this.top, k = T.span / (this.h / 2); T.x = clamp(T.x + dx * k, -60, 60); T.y = clamp(T.y - dy * k, -60, 60); return; }
     const k = this.fov / Math.max(1, this.h);
     this.yaw += dx * k; this.pitch = clamp(this.pitch - dy * k, -40 * DEG, 50 * DEG);
     this.tYaw = this.yaw; this.tPitch = this.pitch;
     if (this.preset !== 'free') { this.preset = 'free'; this.syncBar(); }
   }
-  zoom(f) { this.tFov = clamp(this.tFov / f, 4 * DEG, 85 * DEG); this.fov = clamp(this.fov / f, 4 * DEG, 85 * DEG); }
+  zoom(f) {
+    if (this.preset === 'top') { this.top.span = clamp(this.top.span / f, 1.5, 50); return; }
+    this.tFov = clamp(this.tFov / f, 4 * DEG, 85 * DEG); this.fov = clamp(this.fov / f, 4 * DEG, 85 * DEG);
+  }
   hit(sx, sy) {
     let best = null, bd = 28 * 28;
     for (const [id, s] of this.screen) { const d = (s[0] - sx) ** 2 + (s[1] - sy) ** 2; if (d < bd) { bd = d; best = id; } }
     return best;
   }
-  resetView() { this.preset = 'arr'; this.binos = false; this.needAim = true; this.syncBar(); }
+  resetView() {
+    if (this.preset === 'top') { this.top = { x: 0, y: 0, span: 14 }; return; }
+    this.preset = 'arr'; this.binos = false; this.needAim = true; this.syncBar();
+  }
 }
 
 function invert(m) {
@@ -25488,7 +25709,7 @@ class Game {
     }
     if (w.ended && !this.debriefShown && !this.demo) { this.endSession(); }
     if (w.ended && this.demo) this.startDemo();
-    const f = { world: this.world, settings: this.demo ? { ...this.settings, helpProbes: false } : this.settings, alpha: Math.min(1, this.acc / SIM_DT), selectedId: this.selectedId, hoverId: this.hoverId, drag: this.drag, ui: this.uiScale };
+    const f = { world: this.world, settings: this.demo ? { ...this.settings, helpProbes: false } : this.settings, alpha: Math.min(1, this.acc / SIM_DT), selectedId: this.selectedId, hoverId: this.hoverId, drag: this.drag, ui: this.uiScale, pathDraw: this.pathDraw };
     try {
       if (this.towerOn && this.tower) {
         this.radar.resize();
@@ -25536,7 +25757,14 @@ class Game {
       if (this.radial.open) { this.radial.hide(); if (e.button === 0) return; }
       const [sx, sy] = this.scopeXY(e);
       const base = { sx0: sx, sy0: sy, lx: sx, ly: sy, moved: false, button: e.button };
-      if (this.towerOn) { this.dragView = { ...base, kind: 'look' }; return; }
+      if (this.towerOn) {
+        // top-down view: a drag that starts on an aircraft draws its route
+        const id = e.button === 0 && this.tower.preset === 'top' && !this.demo && this.world ? this.tower.hit(sx, sy) : null, a = id != null ? this.world.find(id) : null;
+        if (a && !a.handedOff && (a.phase === 'AIR' || (a.kind === 'DEP' && (a.phase === 'HOLDING_POINT' || a.phase === 'LINEUP')))) {
+          this.select(id); this.dragView = { ...base, kind: 'path', id, raw: [] };
+        } else this.dragView = { ...base, kind: 'look' };
+        return;
+      }
       if (e.button === 1 || e.button === 2) { this.dragView = { ...base, kind: 'pan', target: e.button === 2 ? (this.targetAt(sx, sy) ?? this.radar.labels.hit(sx, sy)) : null }; return; }
       if (e.button !== 0) return;
       if (e.shiftKey) { const [wx, wy] = this.radar.toWorld(sx, sy); this.dragView = { ...base, kind: 'rbl', wx, wy }; return; }
@@ -25565,6 +25793,13 @@ class Game {
       const dx = sx - d.lx, dy = sy - d.ly; d.lx = sx; d.ly = sy;
       if (Math.hypot(sx - d.sx0, sy - d.sy0) > 4) d.moved = true;
       if (d.kind === 'look') { this.tower.look(-dx, -dy); return; }
+      if (d.kind === 'path') {
+        const a = this.world?.find(d.id); if (!a || !d.moved) return;
+        const p = this.tower.toWorld(sx, sy), l = d.raw[d.raw.length - 1], tol = this.tower.snapTol();
+        if (!l || Math.hypot(p[0] - l[0], p[1] - l[1]) > tol * 0.2) d.raw.push(p);
+        this.pathDraw = { id: d.id, raw: d.raw, plan: this.world.planPath(a, d.raw, tol) };
+        return;
+      }
       if (d.kind === 'pan') { if (d.moved) { sc.classList.add('panning'); this.radar.pan(dx, dy); } return; }
       if (d.kind === 'label') {
         const a = this.world.find(d.id); if (!a) return;
@@ -25584,6 +25819,18 @@ class Game {
       const d = this.dragView; if (!d) return;
       this.dragView = null; sc.classList.remove('panning');
       if (this.towerOn) {
+        if (d.kind === 'path' && d.moved) {
+          const a = this.world?.find(d.id); this.pathDraw = null;
+          if (a && d.raw.length) {
+            const r = this.world.drawPath(a, d.raw, this.tower.snapTol());
+            if (r.ok) this.audio.click();
+            this.strips.update(this.world, performance.now(), true);
+            const pl = r.plan;
+            this.cmds.setMsg(r.ok ? `${a.callsign}: drawn track${pl.rwy ? `, ILS ${pl.rwy}, cleared to land` : pl.fix ? ` to ${pl.fix}` : ''}${pl.warn ? ` — ${pl.warn}` : ''}` : r.errors[0], r.ok && !pl.warn ? 'ok' : 'err');
+          }
+          return;
+        }
+        this.pathDraw = null;
         if (!d.moved && d.button === 0) { const [sx, sy] = this.scopeXY(e); const id = this.tower.hit(sx, sy); this.select(id); if (id != null) this.focusCmd(); }
         return;
       }
