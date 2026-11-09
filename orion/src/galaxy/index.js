@@ -6,6 +6,7 @@ import { GalaxyVolume } from 'orion/galaxy/volume.js';
 import { GalaxyObjects } from 'orion/galaxy/particles.js';
 import { SkyCube } from 'orion/galaxy/skycube.js';
 import { Nebulae } from 'orion/galaxy/nebulae.js';
+import { ExternalGalaxies } from 'orion/galaxy/external.js';
 
 // Galaxy module (spec §07, §11): analytic Milky Way model, raymarched volume, procedural stars, HII regions,
 // globular clusters, sky cubemap for views from inside, registry entries and the opening view above the NGP.
@@ -33,14 +34,18 @@ export async function install(app) {
   const live = objs.layer('live');
   // Procedural nebulae (drawn live in every view; their catalogue sprites are suppressed).
   const ECL_TO_GAL_ = [GAL_TO_ECL[0], GAL_TO_ECL[3], GAL_TO_ECL[6], GAL_TO_ECL[1], GAL_TO_ECL[4], GAL_TO_ECL[7], GAL_TO_ECL[2], GAL_TO_ECL[5], GAL_TO_ECL[8]];
-  const nebulae = new Nebulae(objs.shared, deep || [], (d) => radecToWorld(d.ra, d.dec, d.distPc * PC), (w) => {
+  const galOf = (w) => {
     const x = w[0] / PC, y = w[1] / PC, z = w[2] / PC, m = ECL_TO_GAL_;
     return [-R0 + m[0] * x + m[1] * y + m[2] * z, m[3] * x + m[4] * y + m[5] * z, Z_SUN + m[6] * x + m[7] * y + m[8] * z];
-  });
+  };
+  const nebulae = new Nebulae(objs.shared, deep || [], (d) => radecToWorld(d.ra, d.dec, d.distPc * PC), galOf);
   shared.nebulae = nebulae;
-  const catalogue = buildCatalogue(deep || [], glob || [], nebulae.ids);
+  // Photographs of the other galaxies (their catalogue sprites are suppressed too).
+  const external = new ExternalGalaxies(app, objs.shared, deep || [], galOf);
+  shared.external = external;
+  const catalogue = buildCatalogue(deep || [], glob || [], new Set([...nebulae.ids, ...external.ids]));
   objs.setCatalogue(catalogue);
-  app.layers.sky.add(live.group, live.world, nebulae.mesh);
+  app.layers.sky.add(live.group, live.world, nebulae.mesh, external.group);
   let cube = null;
   const cam = { g: new Float64Array(3) };
   const state = { wv: 1, cubeW: 0, started: false, gainOut: 1, wantCube: false };
@@ -123,6 +128,7 @@ export async function install(app) {
     live.world.visible = true;
     cube.setDisplay(frame, cubeW);
     nebulae.update(frame, cam.g, outGain * Math.sqrt(adapt) * shared.tune.nebulaGain);
+    external.update(frame, cam.g, outGain * Math.sqrt(adapt));
   }, 0);
 
   app.graph.prePasses.push((renderer, frame) => {
@@ -252,6 +258,7 @@ function galDir(lDeg, bDeg) {
   const l = lDeg * DEG, b = bDeg * DEG, g = [Math.cos(b) * Math.cos(l), Math.cos(b) * Math.sin(l), Math.sin(b)], m = GAL_TO_ECL;
   return [m[0] * g[0] + m[1] * g[1] + m[2] * g[2], m[3] * g[0] + m[4] * g[1] + m[5] * g[2], m[6] * g[0] + m[7] * g[1] + m[8] * g[2]];
 }
+const sunward = (w) => { const l = Math.hypot(w[0], w[1], w[2]); return [-w[0] / l, -w[1] / l, -w[2] / l]; };
 function registerEntries(app, deep, glob) {
   const reg = app.registry;
   // galaxy-frame -> world metres with a per-jd cached matrix (positions are queried every frame by labels and search).
@@ -337,6 +344,7 @@ function registerEntries(app, deep, glob) {
       id: d.id, name: d.name, aliases: d.aliases || [], type: ({ planetary: 'nebula', snr: 'nebula' })[d.type] || d.type,
       parent: galaxy ? null : d.type === 'globular' ? 'milky-way' : 'orion-spur', level: galaxy ? 0 : d.distPc > 3000 ? 1 : 2,
       priority: 30, radius: 0, position: (jd, out) => { out.set(world); return out; },
+      ...(galaxy && d.distPc > 1e5 ? { viewDir: sunward(world) } : null),   // the photograph is the view from Earth
       viewDistance: (VIEW_PC[d.id] ?? Math.max(size * 2.5, 1)) * PC, minDistance: Math.max(size * 0.3, 0.1) * PC,
       apparentMag: (camPos) => (d.mag ?? 12) + 5 * Math.log10(Math.max(Math.hypot(camPos[0] - world[0], camPos[1] - world[1], camPos[2] - world[2]) / PC, 0.01) / d.distPc),
       info: { description: d.desc || '', kind: d.type, magnitude: d.mag, distanceLy: d.distPc * LY_PER_PC, sizeLy: size * LY_PER_PC },

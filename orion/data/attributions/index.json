@@ -1,1 +1,9 @@
-["ephemeris.json","stars.json","galaxy.json","bodies.json","small.json","ui.json"]
+[
+ "ephemeris.json",
+ "stars.json",
+ "galaxy.json",
+ "bodies.json",
+ "small.json",
+ "ui.json",
+ "galaxies.json"
+]

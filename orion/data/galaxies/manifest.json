@@ -1,0 +1,285 @@
+{
+ "version": 1,
+ "galaxies": {
+  "andromeda-galaxy": {
+   "file": "data/galaxies/andromeda-galaxy.jpg",
+   "fill": 0.92
+  },
+  "triangulum-galaxy": {
+   "file": "data/galaxies/triangulum-galaxy.jpg",
+   "fill": 0.92
+  },
+  "m49": {
+   "file": "data/galaxies/m49.jpg",
+   "fill": 0.92
+  },
+  "whirlpool-galaxy": {
+   "file": "data/galaxies/whirlpool-galaxy.jpg",
+   "fill": 0.92
+  },
+  "m58": {
+   "file": "data/galaxies/m58.jpg",
+   "fill": 0.846
+  },
+  "m59": {
+   "file": "data/galaxies/m59.jpg",
+   "fill": 0.918
+  },
+  "m60": {
+   "file": "data/galaxies/m60.jpg",
+   "fill": 0.92
+  },
+  "m61": {
+   "file": "data/galaxies/m61.jpg",
+   "fill": 0.871
+  },
+  "m63": {
+   "file": "data/galaxies/m63.jpg",
+   "fill": 0.92
+  },
+  "m64": {
+   "file": "data/galaxies/m64.jpg",
+   "fill": 0.92
+  },
+  "m65": {
+   "file": "data/galaxies/m65.jpg",
+   "fill": 0.92
+  },
+  "m66": {
+   "file": "data/galaxies/m66.jpg",
+   "fill": 0.864
+  },
+  "m74": {
+   "file": "data/galaxies/m74.jpg",
+   "fill": 0.92
+  },
+  "m77": {
+   "file": "data/galaxies/m77.jpg",
+   "fill": 0.92
+  },
+  "bodes-galaxy": {
+   "file": "data/galaxies/bodes-galaxy.jpg",
+   "fill": 0.92
+  },
+  "cigar-galaxy": {
+   "file": "data/galaxies/cigar-galaxy.jpg",
+   "fill": 0.92
+  },
+  "m83": {
+   "file": "data/galaxies/m83.jpg",
+   "fill": 0.92
+  },
+  "m84": {
+   "file": "data/galaxies/m84.jpg",
+   "fill": 0.848
+  },
+  "m85": {
+   "file": "data/galaxies/m85.jpg",
+   "fill": 0.92
+  },
+  "m86": {
+   "file": "data/galaxies/m86.jpg",
+   "fill": 0.92
+  },
+  "virgo-a": {
+   "file": "data/galaxies/virgo-a.jpg",
+   "fill": 0.846
+  },
+  "m88": {
+   "file": "data/galaxies/m88.jpg",
+   "fill": 0.846
+  },
+  "m89": {
+   "file": "data/galaxies/m89.jpg",
+   "fill": 0.846
+  },
+  "m90": {
+   "file": "data/galaxies/m90.jpg",
+   "fill": 0.92
+  },
+  "m91": {
+   "file": "data/galaxies/m91.jpg",
+   "fill": 0.92
+  },
+  "m94": {
+   "file": "data/galaxies/m94.jpg",
+   "fill": 0.92
+  },
+  "m95": {
+   "file": "data/galaxies/m95.jpg",
+   "fill": 0.861
+  },
+  "m96": {
+   "file": "data/galaxies/m96.jpg",
+   "fill": 0.92
+  },
+  "m98": {
+   "file": "data/galaxies/m98.jpg",
+   "fill": 0.92
+  },
+  "m99": {
+   "file": "data/galaxies/m99.jpg",
+   "fill": 0.846
+  },
+  "m100": {
+   "file": "data/galaxies/m100.jpg",
+   "fill": 0.92
+  },
+  "pinwheel-galaxy": {
+   "file": "data/galaxies/pinwheel-galaxy.jpg",
+   "fill": 0.92
+  },
+  "m102": {
+   "file": "data/galaxies/m102.jpg",
+   "fill": 0.92
+  },
+  "sombrero-galaxy": {
+   "file": "data/galaxies/sombrero-galaxy.jpg",
+   "fill": 0.92
+  },
+  "m105": {
+   "file": "data/galaxies/m105.jpg",
+   "fill": 0.846
+  },
+  "m106": {
+   "file": "data/galaxies/m106.jpg",
+   "fill": 0.92
+  },
+  "m108": {
+   "file": "data/galaxies/m108.jpg",
+   "fill": 0.92
+  },
+  "m109": {
+   "file": "data/galaxies/m109.jpg",
+   "fill": 0.92
+  },
+  "m110": {
+   "file": "data/galaxies/m110.jpg",
+   "fill": 0.92
+  },
+  "c3": {
+   "file": "data/galaxies/c3.jpg",
+   "fill": 0.92
+  },
+  "c5": {
+   "file": "data/galaxies/c5.jpg",
+   "fill": 0.92
+  },
+  "c7": {
+   "file": "data/galaxies/c7.jpg",
+   "fill": 0.92
+  },
+  "c12": {
+   "file": "data/galaxies/c12.jpg",
+   "fill": 0.92
+  },
+  "c21": {
+   "file": "data/galaxies/c21.jpg",
+   "fill": 0.92
+  },
+  "c23": {
+   "file": "data/galaxies/c23.jpg",
+   "fill": 0.92
+  },
+  "c24": {
+   "file": "data/galaxies/c24.jpg",
+   "fill": 0.92
+  },
+  "c26": {
+   "file": "data/galaxies/c26.jpg",
+   "fill": 0.92
+  },
+  "c29": {
+   "file": "data/galaxies/c29.jpg",
+   "fill": 0.92
+  },
+  "c30": {
+   "file": "data/galaxies/c30.jpg",
+   "fill": 0.92
+  },
+  "c32": {
+   "file": "data/galaxies/c32.jpg",
+   "fill": 0.92
+  },
+  "c35": {
+   "file": "data/galaxies/c35.jpg",
+   "fill": 0.92
+  },
+  "c36": {
+   "file": "data/galaxies/c36.jpg",
+   "fill": 0.846
+  },
+  "c38": {
+   "file": "data/galaxies/c38.jpg",
+   "fill": 0.92
+  },
+  "c40": {
+   "file": "data/galaxies/c40.jpg",
+   "fill": 0.846
+  },
+  "c43": {
+   "file": "data/galaxies/c43.jpg",
+   "fill": 0.92
+  },
+  "c44": {
+   "file": "data/galaxies/c44.jpg",
+   "fill": 0.92
+  },
+  "c45": {
+   "file": "data/galaxies/c45.jpg",
+   "fill": 0.92
+  },
+  "c48": {
+   "file": "data/galaxies/c48.jpg",
+   "fill": 0.92
+  },
+  "c51": {
+   "file": "data/galaxies/c51.jpg",
+   "fill": 0.92
+  },
+  "c53": {
+   "file": "data/galaxies/c53.jpg",
+   "fill": 0.894
+  },
+  "c57": {
+   "file": "data/galaxies/c57.jpg",
+   "fill": 0.92
+  },
+  "antennae-galaxies": {
+   "file": "data/galaxies/antennae-galaxies.jpg",
+   "fill": 0.92
+  },
+  "c62": {
+   "file": "data/galaxies/c62.jpg",
+   "fill": 0.92
+  },
+  "sculptor-galaxy": {
+   "file": "data/galaxies/sculptor-galaxy.jpg",
+   "fill": 0.849
+  },
+  "c67": {
+   "file": "data/galaxies/c67.jpg",
+   "fill": 0.92
+  },
+  "c70": {
+   "file": "data/galaxies/c70.jpg",
+   "fill": 0.846
+  },
+  "c72": {
+   "file": "data/galaxies/c72.jpg",
+   "fill": 0.89
+  },
+  "centaurus-a": {
+   "file": "data/galaxies/centaurus-a.jpg",
+   "fill": 0.92
+  },
+  "c83": {
+   "file": "data/galaxies/c83.jpg",
+   "fill": 0.92
+  },
+  "c101": {
+   "file": "data/galaxies/c101.jpg",
+   "fill": 0.92
+  }
+ }
+}
