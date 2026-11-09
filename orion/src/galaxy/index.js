@@ -222,8 +222,8 @@ function setupOpeningView(app) {
     const c = app.camera, e = ev.detail;
     if (e?.id === 'milky-way') {
       if (c.upMode !== 'ecliptic') return;
-      if (c.transition) { c.transition.az1 = az; c.transition.el1 = el; } else { c.az = az; c.el = el; }
-      c.roll = roll; rolled = true;
+      if (c.transition) { c.transition.az1 = az; c.transition.el1 = el; c.transition.roll1 = roll; } else { c.az = az; c.el = el; c.roll = roll; }
+      rolled = true;
     } else if (rolled) { c.roll = 0; rolled = false; }
   });
 }

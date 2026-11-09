@@ -38,7 +38,12 @@ export function labelAlpha(e, d, disc, f, settings, crowd = 0) {
       const magOk = m == null ? 1 : 1 - sm(8.5, 10.5, m);
       return Math.max(sm(6, 14, disc), (1 - sm(2e3 * PC, 5e3 * PC, d)) * magOk * (1 - crowd));
     }
-    case 'galaxy': return sm(2e3 * PC, 1e4 * PC, d) * (1 - sm(1e6 * PC, 3e6 * PC, d)) * (1 - crowd);
+    case 'galaxy': {
+      // Local Group members are labelled from anywhere; the rest once the camera has pulled back out of the solar
+      // neighbourhood (camera position is heliocentric), where the Milky Way is one galaxy among them.
+      const out = sm(1e3 * PC, 5e3 * PC, Math.hypot(f.camPos[0], f.camPos[1], f.camPos[2]));
+      return sm(2e3 * PC, 1e4 * PC, d) * Math.max(1 - sm(1e6 * PC, 3e6 * PC, d), out) * (1 - crowd);
+    }
     // ~150 globulars would carpet the face-on overview; label them from inside the halo only.
     case 'globular': return (1 - sm(4e3 * PC, 1e4 * PC, d)) * (1 - crowd);
     case 'constellation': return settings.constellations && lv[2] > 0.3 ? 1 : 0;

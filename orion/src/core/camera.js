@@ -8,6 +8,7 @@ import { GAL_TO_ECL } from 'orion/core/frames.js';
 const MIN_DIST = 10;            // m, for point-like focus targets
 const MAX_DIST = 1.2e22;        // m, ~390 kpc
 const WHEEL_RATIO = 1.15;       // distance ratio per wheel notch
+const DRAG_RATE = 0.005;        // rad per pixel of drag when far from the focus
 
 export function defaultViewDistance(e) {
   if (e.viewDistance) return e.viewDistance;
@@ -74,7 +75,8 @@ export class CameraController extends EventTarget {
       az1 = this.az + Math.atan2(Math.sin(a - this.az), Math.cos(a - this.az));
       el1 = Math.asin(clamp(x * this.up.x + y * this.up.y + z * this.up.z, -1, 1));
     }
-    this.transition = { entry, c0, d0, d1, peak: this.reducedMotion ? Math.max(d0, d1) : peak, t: 0, duration, el1, az1, az0: this.az, el0: this.el };
+    const roll0 = Math.atan2(Math.sin(this.roll), Math.cos(this.roll));   // arrive level, the short way round
+    this.transition = { entry, c0, d0, d1, peak: this.reducedMotion ? Math.max(d0, d1) : peak, t: 0, duration, el1, az1, az0: this.az, el0: this.el, roll0, roll1: 0 };
     this.focus = entry;
     if (this.reducedMotion) this.dispatchEvent(new Event('crossfade'));
     this.#emitFocus();
@@ -105,6 +107,26 @@ export class CameraController extends EventTarget {
   }
   // Rotate / zoom programmatically (used by keyboard and tours).
   orbitBy(daz, del) { if (this.mode === 'fly') return this.#look(daz, del); this.az += daz; this.el = clamp(this.el + del, -1.553, 1.553); }
+  // Trackball: turn the camera about its own up (ax) and right (ay) axes through the orbit centre, so the focus always
+  // moves the way the pointer does, at any elevation or roll, with no pole to stick on. az / el / roll are re-derived.
+  trackball(ax, ay) {
+    if (this.mode === 'fly') return this.#look(ax, -ay);
+    this.#orbitPose(this.app.time.jd);
+    this.quat.multiply(_q.setFromAxisAngle(_v.set(0, 1, 0), ax)).multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), ay)).normalize();
+    _o.set(0, 0, 1).applyQuaternion(this.quat);
+    this.el = Math.asin(clamp(_o.dot(this.up), -1, 1));
+    this.az = Math.atan2(_o.dot(_y), _o.dot(_x));
+    _m.lookAt(_o, _v.set(0, 0, 0), this.up);
+    _q.setFromRotationMatrix(_m).invert().multiply(this.quat);   // what is left is a turn about the view axis
+    this.roll = 2 * Math.atan2(_q.z, _q.w);
+  }
+  // Drag angle per pixel: far away a fixed rate; close to a body, slow enough that the surface under the pointer follows it.
+  #dragRate() {
+    const R = this.focus?.radius;
+    if (!(R > 0)) return DRAG_RATE;
+    const pxPerRad = (this.app.canvas.clientHeight || 800) / (2 * Math.tan(this.fovY * Math.PI / 360));
+    return clamp((this.dist - R) / (R * pxPerRad), 1e-7, DRAG_RATE);
+  }
   zoomBy(ratio) { if (this.mode === 'orbit' && !this.transition) this.dist = clamp(this.dist * ratio, minDistance(this.focus), MAX_DIST); }
 
   // ---- per frame ---------------------------------------------------------------------------
@@ -150,6 +172,7 @@ export class CameraController extends EventTarget {
     const e = easeInOutCubic(t);
     if (tr.az1 !== undefined) this.az = tr.az0 + (tr.az1 - tr.az0) * e;
     if (tr.el1 !== undefined) this.el = tr.el0 + (tr.el1 - tr.el0) * e;
+    this.roll = tr.roll0 + Math.atan2(Math.sin(tr.roll1 - tr.roll0), Math.cos(tr.roll1 - tr.roll0)) * e;
     if (t >= 1) { this.pan.fill(0); this.dist = tr.d1; this.transition = null; tr.resolve?.(); this.dispatchEvent(new Event('arrived')); }
   }
   // Radius of a solid body's reference ellipsoid under the camera; fly mode may go down to ~2 m above it.
@@ -224,11 +247,11 @@ export class CameraController extends EventTarget {
     this._ride = near ? { id: n.id, c: vcopy(c), q } : null;
   }
   #keysUpdate(dt) {
-    const k = this.keys, r = 1.4 * dt;
-    if (k.has('arrowleft')) this.orbitBy(-r, 0);
-    if (k.has('arrowright')) this.orbitBy(r, 0);
-    if (k.has('arrowup')) this.orbitBy(0, r);
-    if (k.has('arrowdown')) this.orbitBy(0, -r);
+    const k = this.keys, r = 1.4 * dt, o = this.transition ? 0 : r * (this.mode === 'fly' ? 1 : this.#dragRate() / DRAG_RATE);
+    if (o && k.has('arrowleft')) this.trackball(-o, 0);
+    if (o && k.has('arrowright')) this.trackball(o, 0);
+    if (o && k.has('arrowup')) this.trackball(0, -o);
+    if (o && k.has('arrowdown')) this.trackball(0, o);
     if (k.has('q')) { if (this.mode === 'fly') this.quat.multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), r)); else this.roll += r; }
     if (k.has('e')) { if (this.mode === 'fly') this.quat.multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), -r)); else this.roll -= r; }
     if (k.has('+') || k.has('=')) this.zoomBy(Math.pow(WHEEL_RATIO, -dt * 8));
@@ -262,7 +285,7 @@ export class CameraController extends EventTarget {
       if (ptrs.size === 1) {
         if (p.button === 2 || p.shift) this.#panBy(dx, dy);
         else if (this.mode === 'fly') this.#look(-dx * 0.003, -dy * 0.003);
-        else { if (this.transition) return; this.orbitBy(-dx * 0.005, dy * 0.005); }
+        else { if (this.transition) return; const k = this.#dragRate(); this.trackball(-dx * k, -dy * k); }
       }
       p.x = e.clientX; p.y = e.clientY;
       if (ptrs.size === 2) {
