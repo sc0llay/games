@@ -6615,10 +6615,12 @@ __def("js/render/geoLive.js", function () {
 // Offline (or with the setting off) nothing is asked for and the pack's own imagery is all there is.
 const TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const LIVE_CREDIT = 'Imagery © Esri, Maxar, Earthstar Geographics';
-const R_NM = 3440.065, RAD = Math.PI / 180, SIZE = 2048, MAX_Z = 18, MAX_TILES = 160, CACHE = 500;
+const R_NM = 3440.065, RAD = Math.PI / 180, MAX_Z = 18, CACHE = 900;
 
 class GeoLive {
-  constructor(pack) {
+  // size: canvas pixels; maxZ / maxTiles bound what one framing may ask the tile server for
+  constructor(pack, size = 2048, maxZ = MAX_Z, maxTiles = 160) {
+    const SIZE = this.size = size; this.maxZ = maxZ; this.maxTiles = maxTiles;
     this.la0 = pack.lat * RAD; this.lo0 = pack.lon * RAD; this.rot = pack.rot * RAD;
     this.canvas = document.createElement('canvas'); this.canvas.width = this.canvas.height = SIZE;
     this.g = this.canvas.getContext('2d');
@@ -6650,6 +6652,7 @@ class GeoLive {
     const now = performance.now();
     if (R && now - this.moved < 180) return;           // let a drag or a wheel spin settle a little
     this.moved = now;
+    const SIZE = this.size;
     // carry what is already drawn across to the new framing so the ground never blinks back to the pack
     const og = this.old.getContext('2d'); og.clearRect(0, 0, SIZE, SIZE); og.drawImage(this.canvas, 0, 0);
     half *= 1.3;                                        // margin, so small pans need nothing new
@@ -6659,7 +6662,7 @@ class GeoLive {
       this.g.drawImage(this.old, (R.x - R.half - (x - half)) * k, ((y + half) - (R.y + R.half)) * k, w, w);
     }
     this.region = { x, y, half };
-    const mpp = 2 * half * 1852 / SIZE, z = this.z = Math.max(3, Math.min(MAX_Z, Math.ceil(Math.log2(156543.03 * Math.cos(this.la0) / mpp) - 0.35))), n = 2 ** z;
+    const mpp = 2 * half * 1852 / SIZE, z = this.z = Math.max(3, Math.min(this.maxZ, Math.ceil(Math.log2(156543.03 * Math.cos(this.la0) / mpp) - 0.35))), n = 2 ** z;
     let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
     for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
       const [la, lo] = this.latlon(x + (i / 2 - 1) * half, y + (j / 2 - 1) * half), [tx, ty] = this.tileOf(la, lo, n);
@@ -6667,7 +6670,7 @@ class GeoLive {
     }
     x0 = Math.floor(x0); x1 = Math.floor(x1); y0 = Math.floor(y0); y1 = Math.floor(y1);
     this.want = [];
-    if ((x1 - x0 + 1) * (y1 - y0 + 1) > MAX_TILES) return;
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > this.maxTiles) return;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) this.want.push([z, tx, ty]);
     this.want.sort((a, b) => Math.hypot(a[1] - cx, a[2] - cy) - Math.hypot(b[1] - cx, b[2] - cy));
@@ -6694,7 +6697,7 @@ class GeoLive {
   // a tile is small enough to be an affine patch in the sim frame: place it by three of its corners
   paint(t, z, tx, ty) {
     const R = this.region; if (!R) return;
-    const n = 2 ** z, k = SIZE / (2 * R.half), P = (x, y) => [(x - (R.x - R.half)) * k, ((R.y + R.half) - y) * k];
+    const SIZE = this.size, n = 2 ** z, k = SIZE / (2 * R.half), P = (x, y) => [(x - (R.x - R.half)) * k, ((R.y + R.half) - y) * k];
     const a = P(...this.cornerXY(tx, ty, n)), b = P(...this.cornerXY(tx + 1, ty, n)), c = P(...this.cornerXY(tx, ty + 1, n));
     const w = t.img.naturalWidth || 256, o = 0.6 / w;   // a hair of overlap hides the seams
     const ux = (b[0] - a[0]) / w, uy = (b[1] - a[1]) / w, vx = (c[0] - a[0]) / w, vy = (c[1] - a[1]) / w;
@@ -23048,7 +23051,7 @@ const TERRAIN_FS = `#version 300 es
 precision highp float; precision highp int;
 in vec3 vW; in vec3 vN; in vec4 vM; in float vC; out vec4 o;
 uniform float uFieldRot, uGridRot, uDesert, uGeo;
-uniform sampler2D uG0, uG1, uG2, uG3; uniform vec4 uLive;   // uG3: streamed aerial tiles about uLive.xy (east, north), half-width uLive.z      // satellite imagery, half-widths 6 / 24 / 80 nm about the ARP
+uniform sampler2D uG0, uG1, uG2, uG3, uG4; uniform vec4 uLive, uNear;   // uG3: streamed aerial tiles about uLive.xy (east, north), half-width uLive.z      // satellite imagery, half-widths 6 / 24 / 80 nm about the ARP
 uniform vec4 uRwy[3]; uniform vec2 uRwyD[3]; uniform int uNRwy;
 ${NOISE}${COMMON}${TNOISE}
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
@@ -23223,6 +23226,12 @@ void main() {
       vec2 lu = vec2(pn.x - uLive.x, pn.y + uLive.y) / (2.0 * uLive.z) + 0.5, le = min(lu, 1.0 - lu);
       vec4 lv = texture(uG3, lu);
       im = mix(im, lv.rgb * 1.06, lv.a * smoothstep(0.0, 0.03, min(le.x, le.y)));
+    }
+    // a second, much finer patch of streamed tiles about the eye (tower views)
+    if (uNear.w > 0.5) {
+      vec2 lu = vec2(pn.x - uNear.x, pn.y + uNear.y) / (2.0 * uNear.z) + 0.5, le = min(lu, 1.0 - lu);
+      vec4 lv = texture(uG4, lu);
+      im = mix(im, lv.rgb * 1.06, lv.a * smoothstep(0.0, 0.06, min(le.x, le.y)));
     }
     // the invented airfield keeps its own grass, toned to the countryside it sits in
     vec3 av = pow(textureLod(uG0, pn / 12.0 + 0.5, 7.0).rgb, vec3(0.9)) * 1.28;
@@ -23687,14 +23696,22 @@ class Tower {
     const gl = this.gl;
     if (!this.geoTex) this.geoTex = [0, 1, 2].map(() => gl.createTexture());
     const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
-    this.live = null; this.liveOn = false;
+    this.live = null; this.liveOn = false; this.near = null; this.nearOn = false;
     if (!this.liveTex) {
       this.liveTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.liveTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
+    if (!this.nearTex) {
+      this.nearTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.nearTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    }
     if (geo) { try { this.live = new GeoLive(geo); } catch (e) { this.live = null; } }
+    if (geo && gl.getParameter(gl.MAX_TEXTURE_SIZE) >= 4096) { try { this.near = new GeoLive(geo, 4096, 17, 340); } catch (e) { this.near = null; } }
     this.geoTex.forEach((t, i) => {
       gl.bindTexture(gl.TEXTURE_2D, t);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -24226,6 +24243,22 @@ class Tower {
       }
       if (this.liveOn) lr = this.liveR;
     }
+    // ... and the ground about the tower at roughly 2 ft a pixel
+    let nr = null;
+    if (lr && !top && this.near) {
+      this.near.view(S.eye[0], S.eye[1], 0.6);
+      if (this.near.take()) {
+        gl.bindTexture(gl.TEXTURE_2D, this.nearTex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        try {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, this.near.canvas); gl.generateMipmap(gl.TEXTURE_2D);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+          this.nearR = { ...this.near.region }; this.nearOn = true;
+        } catch (e) { this.near = null; this.nearOn = false; }
+      }
+      if (this.nearOn) nr = this.nearR;
+    }
+    gl.uniform4f(p.u.uNear, nr ? nr.x : 0, nr ? nr.y : 0, nr ? nr.half : 1, nr ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.nearTex); gl.uniform1i(p.u.uG4, 6);
     this.liveShown = !!lr;
     gl.uniform4f(p.u.uLive, lr ? lr.x : 0, lr ? lr.y : 0, lr ? lr.half : 1, lr ? 1 : 0);
     gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, this.liveTex); gl.uniform1i(p.u.uG3, 5);
