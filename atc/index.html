@@ -605,7 +605,7 @@ const AIRCRAFT_TYPES = {
   DH8D: { name: 'Dash 8-400',      cls: 'TP',  wake: 'S',  vr: 115, vapp: 125, vmin: 150, vmax: 270, vclimb: 210, vcruise: 250, climb: [2200, 1200], desc: [2000, 2400], accel: 1.4, decel: 1.2, bank: 25, ceiling: 25000, roll: 35 },
   AT76: { name: 'ATR 72-600',      cls: 'TP',  wake: 'S',  vr: 110, vapp: 118, vmin: 140, vmax: 240, vclimb: 170, vcruise: 220, climb: [1700, 900],  desc: [1800, 2000], accel: 1.2, decel: 1.1, bank: 25, ceiling: 25000, roll: 35 },
   E190: { name: 'Embraer 190',     cls: 'RJ',  wake: 'LM', vr: 135, vapp: 135, vmin: 170, vmax: 320, mmo: 0.82, vclimb: 270, vcruise: 290, climb: [3000, 1800], desc: [2200, 2800], accel: 1.3, decel: 1.0, bank: 25, ceiling: 41000, roll: 45 },
-  CRJ9: { name: 'CRJ-900',         cls: 'RJ',  wake: 'LM', vr: 140, vapp: 140, vmin: 175, vmax: 320, mmo: 0.85, vclimb: 280, vcruise: 290, climb: [3200, 1800], desc: [2300, 2900], accel: 1.3, decel: 1.0, bank: 25, ceiling: 41000, roll: 45 },
+  CRJ9: { name: 'CRJ-900',         cls: 'RJ',  wake: 'S',  vr: 140, vapp: 140, vmin: 175, vmax: 320, mmo: 0.85, vclimb: 280, vcruise: 290, climb: [3200, 1800], desc: [2300, 2900], accel: 1.3, decel: 1.0, bank: 25, ceiling: 41000, roll: 45 },
   A320: { name: 'Airbus A320',     cls: 'NB',  wake: 'LM', vr: 145, vapp: 137, vmin: 180, vmax: 340, mmo: 0.82, vclimb: 290, vcruise: 300, climb: [2800, 1700], desc: [2200, 3000], accel: 1.2, decel: 0.9, bank: 25, ceiling: 39000, roll: 50 },
   A321: { name: 'Airbus A321',     cls: 'NB',  wake: 'LM', vr: 150, vapp: 142, vmin: 185, vmax: 340, mmo: 0.82, vclimb: 290, vcruise: 300, climb: [2500, 1500], desc: [2200, 3000], accel: 1.1, decel: 0.9, bank: 25, ceiling: 39000, roll: 55 },
   B738: { name: 'Boeing 737-800',  cls: 'NB',  wake: 'LM', vr: 150, vapp: 145, vmin: 185, vmax: 340, mmo: 0.82, vclimb: 290, vcruise: 300, climb: [2700, 1600], desc: [2300, 3100], accel: 1.2, decel: 0.9, bank: 25, ceiling: 41000, roll: 50 },
@@ -635,7 +635,7 @@ const AIRCRAFT_TYPES = {
   B2:   { name: 'B-2 Spirit',          cls: 'MIL', wake: 'H',  vr: 140, vapp: 140, vmin: 190, vmax: 360, mmo: 0.95, vclimb: 280, vcruise: 300, climb: [3000, 2000],  desc: [2500, 3200], accel: 1.0, decel: 0.8, bank: 30, ceiling: 50000, roll: 60, stealth: true },
   U2:   { name: 'U-2 Dragon Lady',     cls: 'MIL', wake: 'S',  vr: 90,  vapp: 85,  vmin: 100, vmax: 220, mmo: 0.72, vclimb: 160, vcruise: 200, climb: [5000, 3500],  desc: [1500, 2000], accel: 1.0, decel: 0.6, bank: 20, ceiling: 73000, roll: 40 },
   A225: { name: 'Antonov An-225 Mriya',cls: 'MIL', wake: 'J',  vr: 165, vapp: 150, vmin: 210, vmax: 330, mmo: 0.77, vclimb: 280, vcruise: 290, climb: [1500, 900],   desc: [1600, 2200], accel: 0.6, decel: 0.5, bank: 22, ceiling: 36000, roll: 75 },
-  SR71: { name: 'SR-71 Blackbird',     cls: 'MIL', wake: 'UM', vr: 210, vapp: 175, vmin: 230, vmax: 450, mmo: 3.3,  vclimb: 400, vcruise: 450, climb: [10000, 6000], desc: [5000, 7000], accel: 3.0, decel: 1.5, bank: 30, ceiling: 85000, roll: 50 },
+  SR71: { name: 'SR-71 Blackbird',     cls: 'MIL', wake: 'LM', vr: 210, vapp: 175, vmin: 230, vmax: 450, mmo: 3.3,  vclimb: 400, vcruise: 450, climb: [10000, 6000], desc: [5000, 7000], accel: 3.0, decel: 1.5, bank: 30, ceiling: 85000, roll: 50 },
   X15:  { name: 'North American X-15', cls: 'MIL', wake: 'L',  vr: 200, vapp: 195, vmin: 200, vmax: 600, mmo: 6.7,  vclimb: 0,   vcruise: 300, climb: [0, 0],        desc: [9000, 12000], accel: 0.0, decel: 1.2, bank: 35, ceiling: 354200, roll: 25, glider: true },
   TR3B: { name: 'TR-3B Black Manta',   cls: 'MIL', wake: 'L',  vr: 40,  vapp: 60,  vmin: 40,  vmax: 900, mmo: 9.0,  vclimb: 600, vcruise: 600, climb: [40000, 40000], desc: [30000, 30000], accel: 20, decel: 20, bank: 80, ceiling: 300000, roll: 3, stealth: true },
   UFO:  { name: 'Sport Model saucer',  cls: 'MIL', wake: 'L',  vr: 30,  vapp: 50,  vmin: 30,  vmax: 2000, mmo: 40,  vclimb: 900, vcruise: 900, climb: [99000, 99000], desc: [99000, 99000], accel: 60, decel: 60, bank: 89, ceiling: 1000000, roll: 1, ufo: true },
@@ -661,9 +661,13 @@ const SPECIALS = [
 
 const CLASS_NAMES = { GA: 'Light GA', TP: 'Turboprop', RJ: 'Regional jet', NB: 'Narrowbody', WB: 'Widebody', MIL: 'Special', FJ: 'Fast jet', HV: 'Military heavy', UA: 'Drone' };
 
-// Wake turbulence radar separation on final, nm (UK CAP493 table). Missing pairs fall back to radar minimum.
+// Wake turbulence separation on final, nm: UK CAP 493 (MATS Part 1) Edition 12, 31 Oct 2025, Section 1 Chapter 3 para 9E,
+// Table 3 (J->H is 5 NM there). 0 = '#', no wake separation needed. UM and LM are split on arrival only.
+// Per-type UK arrival categories: CAA 'UK Wake Turbulence Categorisation V7' (Aug 2025), 'UK Arrival WTC' column
+// (CRJ9 SMALL, E190 LOWER MEDIUM, A320/A321/B738/C130/SR71 LOWER MEDIUM, B752 UPPER MEDIUM, AT76/DH8D SMALL); A225 is
+// SUPER per CAP 493 Appendix B Table 1 note 1. Missing pairs fall back to radar minimum.
 const WAKE_NM = {
-  J:  { J: 0, H: 6, UM: 7, LM: 7, S: 7, L: 8 },
+  J:  { J: 0, H: 5, UM: 7, LM: 7, S: 7, L: 8 },
   H:  { J: 0, H: 4, UM: 5, LM: 5, S: 6, L: 7 },
   UM: { J: 0, H: 0, UM: 3, LM: 4, S: 4, L: 6 },
   LM: { J: 0, H: 0, UM: 0, LM: 0, S: 3, L: 5 },
@@ -1286,6 +1290,24 @@ __def("js/sim/airport.js", function () {
 const { hdgVec, norm360, pointInPoly } = __m("js/core/geo.js");
 const NM_PER_FT = 1 / 6076.12;
 
+// ---- Transition level (TL) from QNH and the transition altitude (TA) ----
+// Source: UK CAP 493 (MATS Part 1) Edition 12, 31 Oct 2025, Section 1 Chapter 7 para 5B.1 and Appendix A Table 1
+// ("Determining Transition Level"); UK AIP ENR 1.7 para 3.4. TL is the lowest FL at least a nominal 1000 ft (ISA)
+// above the TA; it is taken from the table for the aerodrome QNH. The table's note gives the basis: standard
+// pressure 1013.25 hPa and 27.3 ft per hPa. Table rows (QNH band, lower bound -> TL for TA 3000/4000/5000/6000):
+//   1050-1060: 30/40/50/60   1032-1049: 35/45/55/65   1014-1031: 40/50/60/70   995-1013: 45/55/65/75
+//   977-994:   50/60/70/80   959-976:   55/65/75/85   940-958:   60/70/80/90
+// Each row equals ceil500(TA + (1013.25 - QNHlow) * 27.3 + 1000) at the band's lowest QNH, so the same rule is
+// applied to any other TA (the fictional airports; the CAP 493 table itself only covers 3000-6000 ft).
+const TL_BAND_LOW = [1050, 1032, 1014, 995, 977, 959, 940];
+function transitionLevel(ta, qnh) {
+  // QNH above 1060 uses the top band and below 940 the bottom band (the table stops there; not extrapolated).
+  const q = Math.floor(qnh);
+  const low = TL_BAND_LOW.find(b => q >= b) ?? TL_BAND_LOW[TL_BAND_LOW.length - 1];
+  const pressureAltOfTA = ta + (1013.25 - low) * 27.3;
+  return Math.ceil((pressureAltOfTA + 1000) / 500) * 5;  // flight level number (hundreds of ft), 500 ft steps
+}
+
 function polar(p) {
   const [b, d] = p;
   const [ux, uy] = hdgVec(b);
@@ -1312,7 +1334,7 @@ function circlePoly(center, r, n = 48) {
 }
 
 function loadAirport(raw) {
-  const ap = { raw, id: raw.id, icao: raw.icao, name: raw.name, elev: raw.elev, ta: raw.ta, tl: raw.tl,
+  const ap = { raw, id: raw.id, icao: raw.icao, name: raw.name, elev: raw.elev, ta: raw.ta, tlFor: q => transitionLevel(raw.ta, q),
     sectorRadius: raw.sectorRadius, ceiling: raw.ceiling, freqs: { app: raw.appFreq, twr: raw.twrFreq, atis: raw.atisFreq } };
   ap.fixes = {};
   for (const [n, p] of Object.entries(raw.waypoints)) ap.fixes[n] = { name: n, x: polar(p)[0], y: polar(p)[1], kind: 'wpt' };
@@ -1416,141 +1438,13 @@ function mvaAt(ap, x, y) {
 
 function fixPos(ap, name) { return ap.fixes[name] || null; }
 
-return { polar, loadAirport, mvaAt, fixPos };
-});
-__def("js/sim/weather.js", function () {
-// Weather: surface wind with gusts, wind veering/strengthening with altitude, slow drift and front passages.
-const { hdgVec, norm360, clamp, angleDiff } = __m("js/core/geo.js");
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-class Weather {
-  constructor(base, rng, severity = 1) {
-    this.rng = rng;
-    this.severity = severity; // 0 calm .. 3 severe
-    this.dir = base.wind.dir; this.spd = base.wind.spd; this.gust = base.wind.gust || 0;
-    this.qnh = base.qnh; this.vis = base.vis; this.cloud = base.cloud; this.temp = base.temp;
-    this.dew = base.temp - 4;
-    this.target = { dir: this.dir, spd: this.spd, gust: this.gust };
-    this.atisIdx = 0;
-    this.gustPhase = rng.next() * 100;
-    this.precip = '';
-    this.lastIssued = this.snapshot();
-    this.t = 0;
-    this.shearShift = 0;
-  }
-  snapshot() { return { dir: Math.round(this.dir / 10) * 10, spd: Math.round(this.spd), gust: Math.round(this.gust), qnh: Math.round(this.qnh), vis: this.vis, cloud: this.cloud }; }
-  get atis() { return LETTERS[this.atisIdx % 26]; }
-
-  step(dt) {
-    this.t += dt;
-    const k = Math.min(1, dt / 120);
-    this.dir = norm360(this.dir + angleDiff(this.dir, this.target.dir) * k);
-    this.spd += (this.target.spd - this.spd) * k;
-    this.gust += (this.target.gust - this.gust) * k;
-    // slow random drift scaled by severity
-    if (this.rng.chance(dt / 300 * this.severity)) {
-      this.target.dir = norm360(this.target.dir + this.rng.gauss() * 10 * this.severity);
-      this.target.spd = clamp(this.target.spd + this.rng.gauss() * 2 * this.severity, 0, 40);
-      this.target.gust = this.severity >= 2 && this.target.spd > 12 && this.rng.chance(0.5) ? this.target.spd + this.rng.range(6, 14) : 0;
-      this.qnh = clamp(this.qnh + this.rng.gauss() * 0.5, 960, 1045);
-    }
-    const s = this.snapshot(), l = this.lastIssued;
-    if (Math.abs(angleDiff(s.dir, l.dir)) >= 30 || Math.abs(s.spd - l.spd) >= 6 || s.qnh !== l.qnh || s.vis !== l.vis || s.cloud !== l.cloud || Math.abs(s.gust - l.gust) >= 8) {
-      this.atisIdx++; this.lastIssued = s; return true; // new ATIS
-    }
-    return false;
-  }
-
-  frontPassage(rng) {
-    const sev = Math.max(1, this.severity);
-    this.target.dir = norm360(this.dir + rng.range(40, 90) * (rng.chance(0.7) ? 1 : -1));
-    this.target.spd = clamp(this.spd + rng.range(4, 10) * sev / 2, 5, 38);
-    this.target.gust = this.target.spd + rng.range(8, 16);
-    this.vis = rng.pick([3000, 4500, 6000, 8000]);
-    this.cloud = rng.pick([600, 800, 1200, 1500]);
-    this.precip = rng.pick(['RA', '+RA', 'SHRA', 'TSRA']);
-    this.qnh -= rng.int(2, 6);
-  }
-  lowVis(rng) { this.vis = rng.pick([550, 800, 1200]); this.cloud = rng.pick([100, 200, 300]); this.precip = 'FG'; }
-
-  // Instantaneous gust factor (smooth pseudo-noise), 0..1
-  gustNow() {
-    if (this.gust <= this.spd) return 0;
-    const t = this.t + this.gustPhase;
-    const n = 0.5 + 0.25 * Math.sin(t * 0.61) + 0.15 * Math.sin(t * 1.73 + 1.3) + 0.1 * Math.sin(t * 3.1 + 0.4);
-    return clamp((n - 0.35) * 1.6, 0, 1);
-  }
-  // Wind at altitude (ft): returns {dir, spd, vx, vy} where (vx, vy) is the air-mass velocity in kt.
-  windAt(alt, elev = 0) {
-    const h = Math.max(0, alt - elev);
-    const veer = clamp(h / 1000 * 2.2, 0, 35) + this.shearShift * clamp(h / 3000, 0, 1);
-    const dir = norm360(this.dir + veer);
-    let spd = this.spd * (1 + clamp(h / 2000, 0, 1) * 0.5) + clamp(h / 1000, 0, 30) * 1.4;
-    if (h < 3000) spd += (this.gust - this.spd) * this.gustNow() * (1 - h / 3000);
-    const [ux, uy] = hdgVec(norm360(dir + 180));
-    return { dir, spd, vx: ux * spd, vy: uy * spd };
-  }
-  headTail(rwyHdg) { // +headwind / -tailwind, crosswind magnitude
-    const d = angleDiff(rwyHdg, this.dir) * Math.PI / 180;
-    return { head: this.spd * Math.cos(d), cross: Math.abs(this.spd * Math.sin(d)), gHead: Math.max(this.spd, this.gust) * Math.cos(d) };
-  }
-  metar(ap, t) {
-    // observation = the most recent :20 / :50 at or before the sim clock (never in the future)
-    const mins = Math.floor(t / 60), m60 = ((mins % 60) + 60) % 60;
-    const obs = mins - (m60 >= 50 ? m60 - 50 : m60 >= 20 ? m60 - 20 : m60 + 10);
-    const d = new Date(obs * 60000);
-    const dd = String(d.getUTCDate()).padStart(2, '0'), hh = String(d.getUTCHours()).padStart(2, '0'), mm = String(d.getUTCMinutes()).padStart(2, '0');
-    const s = this.snapshot();
-    const wind = s.spd < 1 ? '00000KT' : `${String(s.dir || 360).padStart(3, '0')}${String(s.spd).padStart(2, '0')}${s.gust > s.spd + 9 ? 'G' + s.gust : ''}KT`;
-    const vis = this.vis >= 9999 ? '9999' : String(this.vis).padStart(4, '0');
-    const cb = Math.round(this.cloud / 100);
-    const cloud = this.cloud >= 5000 ? 'FEW050' : `${this.cloud < 1000 ? 'BKN' : 'SCT'}${String(cb).padStart(3, '0')}`;
-    const tmp = n => (n < 0 ? 'M' : '') + String(Math.abs(Math.round(n))).padStart(2, '0');
-    return `${ap.icao} ${dd}${hh}${mm}Z ${wind} ${vis}${this.precip ? ' ' + this.precip : ''} ${cloud} ${tmp(this.temp)}/${tmp(this.dew)} Q${s.qnh}`;
-  }
-}
-
-return { Weather };
-});
-__def("js/core/atmos.js", function () {
-// ICAO standard atmosphere (to ~260,000 ft) and airspeed conversions: CAS <-> Mach <-> TAS.
-// Uses the compressible pitot relations, with the Rayleigh formula above Mach 1, so the
-// supersonic specials (Concorde, SR-71, X-15) get the right true speed at altitude.
-const T0 = 288.15, P0 = 101325, A0 = 661.4786; // K, Pa, kt
-
-function isa(altFt) {
-  const h = Math.max(-1000, altFt) * 0.3048;
-  let T, p;
-  if (h <= 11000) { T = T0 - 0.0065 * h; p = P0 * Math.pow(T / T0, 5.25588); }
-  else if (h <= 20000) { T = 216.65; p = 22632.06 * Math.exp(-(h - 11000) / 6341.62); }
-  else if (h <= 32000) { T = 216.65 + 0.001 * (h - 20000); p = 5474.89 * Math.pow(216.65 / T, 34.1632); }
-  else if (h <= 47000) { T = 228.65 + 0.0028 * (h - 32000); p = 868.02 * Math.pow(228.65 / T, 12.2011); }
-  else { T = 270.65; p = 110.91 * Math.exp(-(Math.min(h, 80000) - 47000) / 7922.3); }
-  return { T, p, a: A0 * Math.sqrt(T / T0) };
-}
-
-function qcFromMach(M, p) {
-  if (M <= 1) return p * (Math.pow(1 + 0.2 * M * M, 3.5) - 1);
-  return p * (166.9216 * Math.pow(M, 7) / Math.pow(7 * M * M - 1, 2.5) - 1);
-}
-
-function machFromQc(qc, p) {
-  const M = Math.sqrt(5 * (Math.pow(qc / p + 1, 2 / 7) - 1));
-  if (M <= 1) return M;
-  let lo = 1, hi = 12;
-  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (qcFromMach(mid, p) < qc) lo = mid; else hi = mid; }
-  return (lo + hi) / 2;
-}
-
-function casToMach(cas, alt) { return machFromQc(qcFromMach(Math.max(0, cas) / A0, P0), isa(alt).p); }
-function machToCas(M, alt) { return A0 * machFromQc(qcFromMach(M, isa(alt).p), P0); }
-function casToTas(cas, alt) { const s = isa(alt); return machFromQc(qcFromMach(Math.max(0, cas) / A0, P0), s.p) * s.a; }
-function machToTas(M, alt) { return M * isa(alt).a; }
-
-return { isa, casToMach, machToCas, casToTas, machToTas };
+return { transitionLevel, polar, loadAirport, mvaAt, fixPos };
 });
 __def("js/sim/phrase.js", function () {
 // Radiotelephony phraseology helpers: spoken digits, callsigns, levels, readbacks.
+// Conventions follow CAP 413 (UK Radiotelephony Manual) Edition 24, 1 July 2026, Chapter 2 (2.13-2.15, Tables 4-6)
+// and Chapter 3 (3.9); altimeter / transition rules follow CAP 493 Edition 12 Section 1 Chapter 7.
+const { transitionLevel } = __m("js/sim/airport.js");
 const DIG = ['zero', 'one', 'two', 'three', 'four', 'fife', 'six', 'seven', 'eight', 'niner'];
 const ALPHA = { A: 'Alpha', B: 'Bravo', C: 'Charlie', D: 'Delta', E: 'Echo', F: 'Foxtrot', G: 'Golf', H: 'Hotel', I: 'India', J: 'Juliet', K: 'Kilo', L: 'Lima', M: 'Mike', N: 'November', O: 'Oscar', P: 'Papa', Q: 'Quebec', R: 'Romeo', S: 'Sierra', T: 'Tango', U: 'Uniform', V: 'Victor', W: 'Whiskey', X: 'X-ray', Y: 'Yankee', Z: 'Zulu' };
 
@@ -1565,15 +1459,61 @@ function spokenCallsign(ac, short = false) {
   return `${ac.rt} ${digits(ac.callsign.slice(ac.op.length))}`;
 }
 
-function spokenAlt(alt, ta) {
-  if (alt > ta) return `flight level ${digits(String(Math.round(alt / 100)).padStart(3, '0'))}`;
+// Current aerodrome QNH (hPa). The Weather object keeps this up to date so that level wording (altitude vs flight level)
+// can follow the transition level derived from QNH without every caller having to pass it.
+let curQnh = 1013;
+function setQnh(q) { curQnh = q; }
+
+// 'alt' when a level is spoken as an altitude, 'fl' as a flight level. UK AIP ENR 1.7 para 3.3 / CAP 493 Ch7 Table 1:
+// at or below the TA it is altitude, at or above the TL a flight level; inside the transition layer a descending
+// aircraft is given altitude and a climbing one flight level (dir 'D' / 'C'; unknown direction keeps flight level).
+function levelKind(alt, ta, dir, qnh = curQnh) {
+  if (alt <= ta) return 'alt';
+  if (alt >= transitionLevel(ta, qnh) * 100) return 'fl';
+  return dir === 'D' ? 'alt' : 'fl';
+}
+
+// CAP 413 Ch2 2.13 para 1 / Table 4: each digit of a flight level is said separately, except whole hundreds (FL100,
+// 200, 300...) which are "flight level (number) HUNDRED". No leading zero is spoken (FL80 = "flight level eight zero").
+function spokenFL(alt) {
+  const n = Math.round(alt / 100);
+  return `flight level ${n % 100 === 0 ? digits(n / 100) + ' hundred' : digits(n)}`;
+}
+// Altitude: CAP 413 Ch2 2.13 para 2 / Table 5, whole thousands and hundreds as "thousand" / "hundred".
+function spokenAltitude(alt) {
   const th = Math.floor(alt / 1000), h = Math.round((alt % 1000) / 100);
   return `altitude ${th ? digits(th) + ' thousand' : ''}${h ? ' ' + digits(h) + ' hundred' : ''} feet`.replace(/\s+/g, ' ');
 }
-function fmtAlt(alt, ta) { return alt > ta ? 'FL' + String(Math.round(alt / 100)).padStart(3, '0') : Math.round(alt) + 'ft'; }
+function spokenAlt(alt, ta, dir, qnh) { return levelKind(alt, ta, dir, qnh) === 'fl' ? spokenFL(alt) : spokenAltitude(alt); }
+function fmtAlt(alt, ta, dir, qnh) { return levelKind(alt, ta, dir, qnh) === 'fl' ? 'FL' + String(Math.round(alt / 100)).padStart(3, '0') : Math.round(alt) + 'ft'; }
+
+// Pressure setting: CAP 413 Ch2 2.13 para 2 / Table 5 (QNH 1000 = "one thousand", otherwise digit by digit). CAP 493 Ch7
+// 6.2: below 1000 hPa the unit is stated clearly.
+function spokenQnh(q) {
+  q = Math.floor(q);
+  const th = Math.floor(q / 1000), h = Math.floor((q % 1000) / 100), whole = q % 100 === 0;
+  return (whole ? `${th ? digits(th) + ' thousand' : ''}${h ? ' ' + digits(h) + ' hundred' : ''}`.trim() : digits(q)) + (q < 1000 ? ' hectopascals' : '');
+}
+
+// Climb / descend / maintain clause for a cleared level. CAP 413 Ch3 3.9: "to" is not used with flight levels and is
+// used immediately before ALTITUDE / HEIGHT ("descend to altitude 2000 feet QNH 1000"); CAP 493 Ch7 7C.2: when cleared
+// from a flight level to an altitude the QNH goes in the same transmission.
+function levelClause(ac, v, ap, qnh) {
+  const verb = v > ac.alt + 50 ? 'climb' : v < ac.alt - 50 ? 'descend' : 'maintain';
+  const dir = verb === 'descend' ? 'D' : verb === 'climb' ? 'C' : undefined;
+  const kind = levelKind(v, ap.ta, dir, qnh || undefined);
+  const qnhSay = kind === 'alt' && ac.alt > ap.ta && qnh ? ` QNH ${spokenQnh(qnh)}` : '';
+  return {
+    verb, kind,
+    disp: `${verb} ${fmtAlt(v, ap.ta, dir, qnh || undefined)}${kind === 'alt' && verb === 'descend' ? ' QNH ' + qnh : ''}`,
+    say: `${verb}${kind === 'alt' && verb !== 'maintain' ? ' to' : ''} ${spokenAlt(v, ap.ta, dir, qnh || undefined)}${qnhSay}`,
+  };
+}
 
 function spokenHdg(h) { return `heading ${digits(String(Math.round(h) || 360).padStart(3, '0'))}`; }
-function spokenFreq(f) { const [a, b = ''] = String(f).split('.'); const d = b.replace(/0+$/, ''); return `${digits(a)}${d ? ' decimal ' + digits(d) : ''}`; }
+// CAP 413 Ch2 2.15 / Table 6: all six figures are used (25 kHz and 8.33 kHz channels alike); only when the final two
+// digits are both zero are the first four given (118.000 = "one one eight decimal zero", 119.050 = "...decimal zero five zero").
+function spokenFreq(f) { const [a, b = ''] = String(f).split('.'); const d = b.padEnd(3, '0'); return `${digits(a)} decimal ${digits(/00$/.test(d) ? d[0] : d)}`; }
 function spokenUnit(u) { return u.replace(/\bCTR\b/i, 'control').replace(/\bAPP\b/i, 'approach').replace(/\bTWR\b/i, 'tower').toLowerCase(); }
 function spokenRwy(r) { return `runway ${digits(r.replace(/[LRC]/, ''))}${/L/.test(r) ? ' left' : /R/.test(r) ? ' right' : /C/.test(r) ? ' centre' : ''}`; }
 
@@ -1590,9 +1530,8 @@ function readback(ac, cmds, ap, qnh) {
       }
       case 'TURN': disp.push(`turn ${c.deg}° ${c.dir === 'L' ? 'left' : 'right'}`); say.push(`turning ${digits(c.deg)} degrees ${c.dir === 'L' ? 'left' : 'right'}`); break;
       case 'ALT': {
-        const verb = c.v > ac.alt + 50 ? 'climb' : c.v < ac.alt - 50 ? 'descend' : 'maintain';
-        disp.push(`${verb} ${fmtAlt(c.v, ap.ta)}${c.v <= ap.ta && verb === 'descend' ? ' QNH ' + qnh : ''}`);
-        say.push(`${verb} ${spokenAlt(c.v, ap.ta)}${c.v <= ap.ta && ac.alt > ap.ta ? ', QNH ' + digits(qnh) : ''}`);
+        const L = levelClause(ac, c.v, ap, qnh);
+        disp.push(L.disp); say.push(L.say);
         break;
       }
       case 'SPD': disp.push(`speed ${c.v}`); say.push(`speed ${digits(c.v)} knots`); break;
@@ -1634,8 +1573,7 @@ function instruction(ac, cmds, ap, qnh) {
       case 'HDG': say.push(`${c.dir === 'L' ? 'turn left ' : c.dir === 'R' ? 'turn right ' : 'fly '}${spokenHdg(c.v)}`); break;
       case 'TURN': say.push(`turn ${c.dir === 'L' ? 'left' : 'right'} ${digits(c.deg)} degrees`); break;
       case 'ALT': {
-        const verb = c.v > ac.alt + 50 ? 'climb' : c.v < ac.alt - 50 ? 'descend' : 'maintain';
-        say.push(`${verb} ${spokenAlt(c.v, ap.ta)}${c.v <= ap.ta && ac.alt > ap.ta && qnh ? ', QNH ' + digits(qnh) : ''}`);
+        say.push(levelClause(ac, c.v, ap, qnh).say);
         break;
       }
       case 'SPD': say.push(`speed ${digits(c.v)} knots`); break;
@@ -1660,7 +1598,169 @@ function instruction(ac, cmds, ap, qnh) {
   return say.length ? `${spokenCallsign(ac)}, ${say.join(', ')}` : '';
 }
 
-return { digits, letter, spokenCallsign, spokenAlt, fmtAlt, spokenHdg, spokenFreq, spokenUnit, spokenRwy, readback, instruction };
+return { digits, letter, spokenCallsign, setQnh, levelKind, spokenFL, spokenAlt, fmtAlt, spokenQnh, spokenHdg, spokenFreq, spokenUnit, spokenRwy, readback, instruction };
+});
+__def("js/sim/weather.js", function () {
+// Weather: surface wind with gusts, wind veering/strengthening with altitude, slow drift and front passages.
+const { hdgVec, norm360, clamp, angleDiff } = __m("js/core/geo.js");
+const { transitionLevel } = __m("js/sim/airport.js");
+const { setQnh } = __m("js/sim/phrase.js");
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+// METAR coding follows WMO-No. 782 (2025 edition) "Aerodrome Reports and Forecasts: A Users' Handbook to the Codes",
+// Part A (METAR and SPECI): group order (wind, visibility, present weather, cloud, air/dew-point temperature, QNH),
+// visibility reporting scale, Code table 4678 definitions (BR = 1000-5000 m, FG < 1000 m), CAVOK conditions,
+// cloud group format and QNH as Q + 4 digits. UK QNH is rounded down to a whole hPa (CAP 493 Ed 12 Sect 1 Ch 7 para 3.2).
+function roundVis(v) {  // WMO 782 Part A visibility scale: 50 m < 800 m, 100 m < 5 km, 1000 m < 10 km, else 9999
+  if (v >= 9999) return 9999;
+  return v < 800 ? Math.floor(v / 50) * 50 : v < 5000 ? Math.floor(v / 100) * 100 : Math.floor(v / 1000) * 1000;
+}
+
+class Weather {
+  constructor(base, rng, severity = 1) {
+    this.rng = rng;
+    this.severity = severity; // 0 calm .. 3 severe
+    this.dir = base.wind.dir; this.spd = base.wind.spd; this.gust = base.wind.gust || 0;
+    this._q = base.qnh; setQnh(Math.floor(this._q));
+    this.vis = base.vis; this.cloud = base.cloud; this.temp = base.temp;
+    this.dew = base.temp - 4;
+    this.target = { dir: this.dir, spd: this.spd, gust: this.gust };
+    this.atisIdx = 0;
+    this.gustPhase = rng.next() * 100;
+    this.precip = '';
+    this.lastIssued = this.snapshot();
+    this.t = 0;
+    this.shearShift = 0;
+  }
+  // Reported QNH is the integer hPa rounded down (CAP 493 Sect 1 Ch 7 3.2); the drifting value is kept in _q.
+  get qnh() { return Math.floor(this._q); }
+  set qnh(v) { this._q = v; setQnh(Math.floor(v)); }
+  tl(ap) { return transitionLevel(ap.ta, this.qnh); }  // CAP 493 Appendix A Table 1, flight level number
+  snapshot() { return { dir: Math.round(this.dir / 10) * 10, spd: Math.round(this.spd), gust: Math.round(this.gust), qnh: this.qnh, vis: this.vis, cloud: this.cloud }; }
+  get atis() { return LETTERS[this.atisIdx % 26]; }
+
+  step(dt) {
+    this.t += dt;
+    const k = Math.min(1, dt / 120);
+    this.dir = norm360(this.dir + angleDiff(this.dir, this.target.dir) * k);
+    this.spd += (this.target.spd - this.spd) * k;
+    this.gust += (this.target.gust - this.gust) * k;
+    // slow random drift scaled by severity
+    if (this.rng.chance(dt / 300 * this.severity)) {
+      this.target.dir = norm360(this.target.dir + this.rng.gauss() * 10 * this.severity);
+      this.target.spd = clamp(this.target.spd + this.rng.gauss() * 2 * this.severity, 0, 40);
+      this.target.gust = this.severity >= 2 && this.target.spd > 12 && this.rng.chance(0.5) ? this.target.spd + this.rng.range(6, 14) : 0;
+      this.qnh = clamp(this._q + this.rng.gauss() * 0.5, 960, 1045);
+    }
+    const s = this.snapshot(), l = this.lastIssued;
+    if (Math.abs(angleDiff(s.dir, l.dir)) >= 30 || Math.abs(s.spd - l.spd) >= 6 || s.qnh !== l.qnh || s.vis !== l.vis || s.cloud !== l.cloud || Math.abs(s.gust - l.gust) >= 8) {
+      this.atisIdx++; this.lastIssued = s; return true; // new ATIS
+    }
+    return false;
+  }
+
+  frontPassage(rng) {
+    const sev = Math.max(1, this.severity);
+    this.target.dir = norm360(this.dir + rng.range(40, 90) * (rng.chance(0.7) ? 1 : -1));
+    this.target.spd = clamp(this.spd + rng.range(4, 10) * sev / 2, 5, 38);
+    this.target.gust = this.target.spd + rng.range(8, 16);
+    this.vis = rng.pick([3000, 4500, 6000, 8000]);
+    this.cloud = rng.pick([600, 800, 1200, 1500]);
+    this.precip = rng.pick(['RA', '+RA', 'SHRA', 'TSRA']);
+    this.qnh = this._q - rng.int(2, 6);
+  }
+  lowVis(rng) { this.vis = rng.pick([550, 800, 1200]); this.cloud = rng.pick([100, 200, 300]); this.precip = this.vis < 1000 ? 'FG' : 'BR'; }
+  // Present weather as it is coded: FG only below 1000 m, BR for 1000-5000 m (WMO 782 Part A code table 4678), and a
+  // visibility of 5000 m or less with no precipitation needs one of the reducing phenomena, so BR is added for it.
+  presentWx() {
+    const v = roundVis(this.vis), p = this.precip === 'FG' || this.precip === 'BR' ? '' : this.precip;
+    return p || (v < 1000 ? 'FG' : v <= 5000 ? 'BR' : '');
+  }
+
+  // Instantaneous gust factor (smooth pseudo-noise), 0..1
+  gustNow() {
+    if (this.gust <= this.spd) return 0;
+    const t = this.t + this.gustPhase;
+    const n = 0.5 + 0.25 * Math.sin(t * 0.61) + 0.15 * Math.sin(t * 1.73 + 1.3) + 0.1 * Math.sin(t * 3.1 + 0.4);
+    return clamp((n - 0.35) * 1.6, 0, 1);
+  }
+  // Wind at altitude (ft): returns {dir, spd, vx, vy} where (vx, vy) is the air-mass velocity in kt.
+  windAt(alt, elev = 0) {
+    const h = Math.max(0, alt - elev);
+    const veer = clamp(h / 1000 * 2.2, 0, 35) + this.shearShift * clamp(h / 3000, 0, 1);
+    const dir = norm360(this.dir + veer);
+    let spd = this.spd * (1 + clamp(h / 2000, 0, 1) * 0.5) + clamp(h / 1000, 0, 30) * 1.4;
+    if (h < 3000) spd += (this.gust - this.spd) * this.gustNow() * (1 - h / 3000);
+    const [ux, uy] = hdgVec(norm360(dir + 180));
+    return { dir, spd, vx: ux * spd, vy: uy * spd };
+  }
+  headTail(rwyHdg) { // +headwind / -tailwind, crosswind magnitude
+    const d = angleDiff(rwyHdg, this.dir) * Math.PI / 180;
+    return { head: this.spd * Math.cos(d), cross: Math.abs(this.spd * Math.sin(d)), gHead: Math.max(this.spd, this.gust) * Math.cos(d) };
+  }
+  metar(ap, t) {
+    // observation = the most recent :20 / :50 at or before the sim clock (never in the future)
+    const mins = Math.floor(t / 60), m60 = ((mins % 60) + 60) % 60;
+    const obs = mins - (m60 >= 50 ? m60 - 50 : m60 >= 20 ? m60 - 20 : m60 + 10);
+    const d = new Date(obs * 60000);
+    const dd = String(d.getUTCDate()).padStart(2, '0'), hh = String(d.getUTCHours()).padStart(2, '0'), mm = String(d.getUTCMinutes()).padStart(2, '0');
+    const s = this.snapshot();
+    const wind = s.spd < 1 ? '00000KT' : `${String(s.dir || 360).padStart(3, '0')}${String(s.spd).padStart(2, '0')}${s.gust > s.spd + 9 ? 'G' + s.gust : ''}KT`;
+    const v = roundVis(this.vis), wx = this.presentWx();
+    // cloud group: amount, base floored to 100 ft (below 10000 ft) or 1000 ft, hundreds of feet in three digits
+    const base = this.cloud < 10000 ? Math.floor(this.cloud / 100) * 100 : Math.floor(this.cloud / 1000) * 1000;
+    const cloud = `${this.cloud < 1000 ? 'BKN' : this.cloud < 5000 ? 'SCT' : 'FEW'}${String(base / 100).padStart(3, '0')}`;
+    // CAVOK replaces visibility, weather and cloud when vis >= 10 km, no cloud below 5000 ft and no significant weather
+    const vwc = v >= 9999 && !wx && this.cloud >= 5000 ? 'CAVOK' : `${String(v).padStart(4, '0')}${wx ? ' ' + wx : ''} ${cloud}`;
+    // dew point never above the temperature; mist/fog is water droplets so the spread is kept within the ~2 C rule of thumb
+    // (AOPA Flight Training, "Weather fog facts", Nov/Dec 2022), otherwise the usual 4 C spread is kept
+    const tc = Math.round(this.temp);
+    let td = Math.min(this.dew, this.temp);
+    if (wx === 'BR' || wx === 'FG') td = Math.max(td, this.temp - 2);
+    td = Math.min(Math.round(td), tc);
+    const tmp = n => (n < 0 ? 'M' : '') + String(Math.abs(n)).padStart(2, '0');
+    return `${ap.icao} ${dd}${hh}${mm}Z ${wind} ${vwc} ${tmp(tc)}/${tmp(td)} Q${String(s.qnh).padStart(4, '0')}`;
+  }
+}
+
+return { roundVis, Weather };
+});
+__def("js/core/atmos.js", function () {
+// ICAO standard atmosphere (to ~260,000 ft) and airspeed conversions: CAS <-> Mach <-> TAS.
+// Uses the compressible pitot relations, with the Rayleigh formula above Mach 1, so the
+// supersonic specials (Concorde, SR-71, X-15) get the right true speed at altitude.
+const T0 = 288.15, P0 = 101325, A0 = 661.4786; // K, Pa, kt
+
+function isa(altFt) {
+  const h = Math.max(-1000, altFt) * 0.3048;
+  let T, p;
+  if (h <= 11000) { T = T0 - 0.0065 * h; p = P0 * Math.pow(T / T0, 5.25588); }
+  else if (h <= 20000) { T = 216.65; p = 22632.06 * Math.exp(-(h - 11000) / 6341.62); }
+  else if (h <= 32000) { T = 216.65 + 0.001 * (h - 20000); p = 5474.89 * Math.pow(216.65 / T, 34.1632); }
+  else if (h <= 47000) { T = 228.65 + 0.0028 * (h - 32000); p = 868.02 * Math.pow(228.65 / T, 12.2011); }
+  else { T = 270.65; p = 110.91 * Math.exp(-(Math.min(h, 80000) - 47000) / 7922.3); }
+  return { T, p, a: A0 * Math.sqrt(T / T0) };
+}
+
+function qcFromMach(M, p) {
+  if (M <= 1) return p * (Math.pow(1 + 0.2 * M * M, 3.5) - 1);
+  return p * (166.9216 * Math.pow(M, 7) / Math.pow(7 * M * M - 1, 2.5) - 1);
+}
+
+function machFromQc(qc, p) {
+  const M = Math.sqrt(5 * (Math.pow(qc / p + 1, 2 / 7) - 1));
+  if (M <= 1) return M;
+  let lo = 1, hi = 12;
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (qcFromMach(mid, p) < qc) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+
+function casToMach(cas, alt) { return machFromQc(qcFromMach(Math.max(0, cas) / A0, P0), isa(alt).p); }
+function machToCas(M, alt) { return A0 * machFromQc(qcFromMach(M, isa(alt).p), P0); }
+function casToTas(cas, alt) { const s = isa(alt); return machFromQc(qcFromMach(Math.max(0, cas) / A0, P0), s.p) * s.a; }
+function machToTas(M, alt) { return M * isa(alt).a; }
+
+return { isa, casToMach, machToCas, casToTas, machToTas };
 });
 __def("js/sim/aircraft.js", function () {
 // Aircraft flight model + pilot. One instance per flight; stepped at the world's fixed timestep.
@@ -2004,14 +2104,64 @@ class Aircraft {
     if (this.nordo) this.clr.landing = true;
   }
 
+  // Degrees still to turn to reach `hdg` turning in direction `dir` ('R'/'L'); wraps near 360 once passed.
+  holdTurnRemaining(hdg, dir) { return dir === 'R' ? norm360(hdg - this.hdg) : norm360(this.hdg - hdg); }
+
+  // Hold entry sector from the track on reaching the fix. PANS-OPS (Doc 8168 Vol I, Pt II, Sec 4 "Entry"; paragraph numbers not verified): sector boundary
+  // line at 70 deg to the inbound track on the holding side, giving sector 1 parallel (110 deg), sector 2 offset (70 deg),
+  // sector 3 direct (180 deg); +/-5 deg flexibility at the boundaries is applied here by favouring direct at the 70/250
+  // boundaries and parallel at the 180 boundary. r = track relative to the inbound course, positive toward the holding side.
+  holdEntryType(h) {
+    const t = this.track != null ? this.track : this.hdg;
+    const r = norm360((h.turn === 'R' ? 1 : -1) * (t - h.inbound));
+    if (r <= 75 || r >= 245) return 'DIRECT';
+    return r <= 185 ? 'PARALLEL' : 'TEARDROP';
+  }
+
   holdGuidance(dt) {
     const h = this.nav.hold, f = this.ap.fixes[h.fix];
     const out = norm360(h.inbound + 180);
     const legTime = this.alt > 14000 ? 90 : 60;
     switch (this.nav.holdState) {
       case 'ENTRY':
-        if (dist(this.x, this.y, f.x, f.y) < 0.7) { this.nav.holdState = 'OUTBOUND_TURN'; this.clr.turnDir = h.turn; this.holdTurnDir = h.turn; }
+        if (dist(this.x, this.y, f.x, f.y) < 0.7) {
+          this.holdTurnDir = h.turn;
+          const entry = this.holdEntryType(h);
+          this.nav.holdEntry = entry;
+          if (entry === 'PARALLEL') this.nav.holdState = 'PAR_OUTTURN';
+          else if (entry === 'TEARDROP') this.nav.holdState = 'TD_OUTTURN';
+          else { this.nav.holdState = 'OUTBOUND_TURN'; this.clr.turnDir = h.turn; }
+        }
         return this.steerToFix(f.x, f.y);
+      // Parallel entry (PANS-OPS Doc 8168 Vol I Pt II Sec 4 holding entry, sector 1): on reaching the fix turn onto the
+      // outbound heading (parallel to the inbound track, non-holding side), fly it for the outbound time, then turn toward the
+      // holding side (opposite to the hold turn, >180 deg) to intercept the inbound track at 30 deg.
+      case 'PAR_OUTTURN': {
+        const rem = this.holdTurnRemaining(out, h.turn);
+        if (rem < 5 || rem > 270) { this.nav.holdState = 'PAR_OUT'; this.nav.holdT = 0; }
+        return norm360(this.hdg + (h.turn === 'R' ? 1 : -1) * Math.min(rem, 60));
+      }
+      case 'PAR_OUT':
+        this.nav.holdT += dt;
+        if (this.nav.holdT > legTime) this.nav.holdState = 'PAR_TURN';
+        return this.wca(out);
+      case 'PAR_TURN': {
+        const opp = h.turn === 'R' ? 'L' : 'R', tgt = norm360(h.inbound + (h.turn === 'R' ? -30 : 30));
+        const rem = this.holdTurnRemaining(tgt, opp);
+        if (rem < 5 || rem > 270) this.nav.holdState = 'INBOUND';
+        return norm360(this.hdg + (opp === 'R' ? 1 : -1) * Math.min(rem, 60));
+      }
+      // Offset (teardrop) entry (sector 2): at the fix turn onto a track 30 deg off the outbound track on the holding side,
+      // fly it for the outbound time, then turn in the hold direction to intercept the inbound track (INBOUND_TURN).
+      case 'TD_OUTTURN': {
+        const tgt = norm360(out + (h.turn === 'R' ? -30 : 30)), d = angleDiff(this.hdg, tgt);
+        if (Math.abs(d) < 5) { this.nav.holdState = 'TD_OUT'; this.nav.holdT = 0; }
+        return norm360(this.hdg + clamp(d, -60, 60));
+      }
+      case 'TD_OUT':
+        this.nav.holdT += dt;
+        if (this.nav.holdT > legTime) this.nav.holdState = 'INBOUND_TURN';
+        return this.wca(norm360(out + (h.turn === 'R' ? -30 : 30)));
       case 'OUTBOUND_TURN': {
         const remaining = h.turn === 'R' ? norm360(out - this.hdg) : norm360(this.hdg - out);
         // done when within 5 deg, or when already past the outbound heading (remaining wraps to near 360): never turn on round again
@@ -2334,6 +2484,13 @@ const { dist, pointInPoly } = __m("js/core/geo.js");
 const { mvaAt } = __m("js/sim/airport.js");
 const LOOKAHEAD = 90, STEP = 5;
 
+// Vertical minimum for a pair. CAP 493 (MATS Part 1) Ed 12, 31 Oct 2025, Section 1 Chapter 3 para 5A.1(1): subsonic
+// traffic needs 2,000 ft above FL290, except 1,000 ft may be used between FL290 and FL410 inclusive for RVSM-approved
+// aircraft. So a pair with either aircraft above FL410 takes at least 2,000 ft. (Para 5A.1(2), 2,000 ft up to FL450 and
+// 4,000 ft above for supersonic traffic, is not modelled.) The sim has types and overflight levels above FL410.
+const RVSM_TOP = 41000;
+function vertMin(setting, altA, altB) { return Math.max(altA, altB) > RVSM_TOP ? Math.max(setting, 2000) : setting; }
+
 function predictAlt(a, t) {
   const target = a.app && a.app.state === 'GS' ? a.alt + (a.vs / 60) * t : a.clr.alt;
   const p = a.alt + (a.vs / 60) * t;
@@ -2356,7 +2513,7 @@ function checkSafety(world) {
   // d < lat, the lookahead only runs inside 30 nm) and its altitude bands overlap to within vert - 50 ft. The band of
   // an aircraft over the lookahead runs from its current altitude to where its vertical speed would take it
   // (predictAlt never leaves that range), so non-overlapping bands rule out LOS and STCA alike. Verdicts are unchanged.
-  const n = air.length, vlim = vert - 50, hlim = Math.max(30, lat), lat2 = lat * lat * 1.000001;
+  const n = air.length, vlim = Math.max(vert, 2000) - 50, hlim = Math.max(30, lat), lat2 = lat * lat * 1.000001;
   const px = new Float64Array(n), py = new Float64Array(n), lo = new Float64Array(n), hi = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const a = air[i], e = a.alt + (a.vs / 60) * LOOKAHEAD;
@@ -2372,7 +2529,8 @@ function checkSafety(world) {
       if (towerPair(a, b, ap, world.t)) continue;
       const dv = Math.abs(a.alt - b.alt);
       const d = dist(a.x, a.y, b.x, b.y);
-      if (d < lat - 0.05 && dv < vert - 50) { alerts.push({ type: 'LOS', ids: [a.id, b.id], key: `LOS:${a.id}:${b.id}`, d, dv }); continue; }
+      const vm = vertMin(vert, a.alt, b.alt);
+      if (d < lat - 0.05 && dv < vm - 50) { alerts.push({ type: 'LOS', ids: [a.id, b.id], key: `LOS:${a.id}:${b.id}`, d, dv }); continue; }
       if (d > 30) continue;
       // closing speed bound: the pair cannot come within lat inside the lookahead if it starts too far apart
       const rvx = a.vx - b.vx, rvy = a.vy - b.vy;
@@ -2383,7 +2541,8 @@ function checkSafety(world) {
         const bx = b.x + b.vx / 3600 * t, by = b.y + b.vy / 3600 * t;
         const ex = ax - bx, ey = ay - by;
         if (ex * ex + ey * ey > lat2) continue;
-        if (Math.hypot(ex, ey) < lat && Math.abs(predictAlt(a, t) - predictAlt(b, t)) < vert - 50) {
+        const pa = predictAlt(a, t), pb = predictAlt(b, t);
+        if (Math.hypot(ex, ey) < lat && Math.abs(pa - pb) < vertMin(vert, pa, pb) - 50) {
           alerts.push({ type: 'STCA', ids: [a.id, b.id], key: `STCA:${a.id}:${b.id}`, t, d }); break;
         }
       }
@@ -2436,7 +2595,7 @@ function checkSafety(world) {
   return alerts;
 }
 
-return { checkSafety };
+return { RVSM_TOP, vertMin, checkSafety };
 });
 __def("js/sim/scoring.js", function () {
 // Session scoring: rewards safe, efficient, timely traffic handling; penalises safety events.
@@ -2681,6 +2840,7 @@ const { DEG, FT_PER_NM, dist, hdgVec, norm360, angleDiff, bearing, clamp, fmtHdg
 const { mvaAt } = __m("js/sim/airport.js");
 const { WAKE_NM } = __m("js/data/aircraft.js");
 const { fmtAlt } = __m("js/sim/phrase.js");
+const { vertMin } = __m("js/sim/separation.js");
 const TASKS = [
   { id: 'handoff', name: 'Handoffs', short: 'HO',
     learn: 'Hand departures and overflights to the next sector with HO once they are near their exit fix, climbing, and clear of conflicts.' },
@@ -3020,7 +3180,7 @@ class Assist {
   probe(ac, level, horizon = 150) {
     if (this.fl) return this.flClean(ac, [{ t: 'ALT', v: level }]);
     const w = this.w, ap = w.ap;
-    const lat = w.settings.sepLateral + 1.8, vert = w.settings.sepVertical - 50;
+    const lat = w.settings.sepLateral + 1.8, sv = w.settings.sepVertical;
     const rate = (level > ac.alt ? ac.climbRate() : ac.descRate()) / 60;
     for (const o of w.aircraft) {
       if (o === ac || o.phase !== 'AIR' || o.alt - ap.elev < 300) continue;
@@ -3033,7 +3193,7 @@ class Assist {
         if (Math.hypot(ax - bx, ay - by) >= lat + (ah ? 4 : 0) + (oh ? 4 : 0)) continue;
         const aAlt = ac.alt + clamp(level - ac.alt, -rate * t, rate * t);
         const oAlt = o.onFinal ? Math.max(ap.elev, o.alt + o.vs / 60 * t) : o.alt + clamp(o.clr.alt - o.alt, -orate * t, orate * t);
-        if (Math.abs(aAlt - oAlt) < vert) return false;
+        if (Math.abs(aAlt - oAlt) < vertMin(sv, aAlt, oAlt) - 50) return false;
       }
     }
     return true;
@@ -3480,7 +3640,7 @@ class Assist {
         const dx = (a.x - b.x) + (a.vx - b.vx) / 3600 * t, dy = (a.y - b.y) + (a.vy - b.vy) / 3600 * t;
         const za = clamp(a.alt + a.vs / 60 * t, Math.min(a.alt, a.clr.alt), Math.max(a.alt, a.clr.alt));
         const zb = clamp(b.alt + b.vs / 60 * t, Math.min(b.alt, b.clr.alt), Math.max(b.alt, b.clr.alt));
-        if (Math.hypot(dx, dy) < lat && Math.abs(za - zb) < vert - 50) { out.push({ type: 'STCA', ids: [a.id, b.id], key: `PRE:${a.id}:${b.id}` }); break; }
+        if (Math.hypot(dx, dy) < lat && Math.abs(za - zb) < vertMin(vert, za, zb) - 50) { out.push({ type: 'STCA', ids: [a.id, b.id], key: `PRE:${a.id}:${b.id}` }); break; }
       }
     }
     return out;
@@ -3847,6 +4007,22 @@ function segIntersect(a, b) {
   return t >= 0 && t <= 1 && u >= 0 && u <= 1;
 }
 
+// Departure wake turbulence minima, seconds between aircraft being airborne, departing from the same position.
+// UK CAP 493 (MATS Part 1) Edition 12, 31 Oct 2025, Section 1 Chapter 3 para 9F, Table 4: SUPER->HEAVY 2 min,
+// SUPER->MEDIUM/SMALL/LIGHT 3 min, HEAVY->MEDIUM/SMALL/LIGHT 2 min, MEDIUM or SMALL->LIGHT 2 min. HEAVY->HEAVY is
+// 4 NM or time equivalent (a distance rule, not modelled here); SUPER->SUPER needs none. UM and LM are not split on
+// departure (Note 2). The 3 / 4 minute intermediate-point minima are not modelled: every departure here starts from the
+// runway threshold.
+function depWakeSeconds(lead, fol) {
+  const cat = w => (w === 'UM' || w === 'LM' ? 'M' : w);
+  const l = cat(lead), f = cat(fol);
+  if (l === 'J') return f === 'J' ? 0 : f === 'H' ? 120 : 180;
+  if (l === 'H') return f === 'J' || f === 'H' ? 0 : 120;
+  if ((l === 'M' || l === 'S') && f === 'L') return 120;
+  return 0;
+}
+const depWakeName = w => ({ J: 'super', H: 'heavy', UM: 'medium', LM: 'medium', S: 'small', L: 'light' }[w] || 'traffic');
+
 class World {
   constructor({ airport, settings, seed = 1, scenario = null, bus, specials = [], mode = 'endless', assist = null }) {
     this.raw = airport;
@@ -4176,8 +4352,9 @@ class World {
   takeoff(ac, byController) {
     const rwy = ac.depRwy;
     const prev = this.lastDep[rwy];
-    if (prev && this.t - prev.t < 120 && ['H', 'J'].includes(prev.wake) && !['H', 'J'].includes(ac.wake)) {
-      this.incident('WAKE', [ac.id], `${ac.callsign} departed ${Math.round(this.t - prev.t)}s behind heavy (2 min required)`);
+    const need = prev ? depWakeSeconds(prev.wake, ac.wake) : 0;
+    if (prev && need > 0 && this.t - prev.t < need) {
+      this.incident('WAKE', [ac.id], `${ac.callsign} departed ${Math.round(this.t - prev.t)}s behind ${depWakeName(prev.wake)} (${need / 60} min required)`);
     }
     ac.phase = 'TAKEOFF'; ac.ias = 0; ac.strip.state = 'TAKEOFF';
     this.lastDep[rwy] = { t: this.t, wake: ac.wake, id: ac.id };
@@ -4264,7 +4441,7 @@ class World {
       const end = this.ap.ends[ac.depRwy];
       if (end.runway.closed) continue;
       const prev = this.lastDep[ac.depRwy];
-      const gap = prev ? (['H', 'J'].includes(prev.wake) && !['H', 'J'].includes(ac.wake) ? 125 : 75) : 0;
+      const gap = prev ? Math.max(75, depWakeSeconds(prev.wake, ac.wake) ? depWakeSeconds(prev.wake, ac.wake) + 5 : 0) : 0;
       if (prev && this.t - prev.t < gap) continue;
       // a faster aircraft behind a slow climber would catch it on the climb-out: wait until it is well clear
       const pa = prev && this.find(prev.id);
@@ -4406,8 +4583,12 @@ class World {
     if (!k || this.mode === 'tutorial') return;
     const rates = { emergency: 0.5, medical: 0.6, nordo: 0.5, closure: 0.2, ilsfail: 0.15, hijack: 0.04 };
     if (this.settings.weatherChanges) rates.front = 0.35;
+    // Each event type rolls on its own sub-stream, drawn every tick whatever happens: toggling one type (or what an
+    // event consumes from this.rng while it runs) cannot shift another type's rolls.
+    this.eventRolls ||= {};
     for (const [type, perHour] of Object.entries(rates)) {
-      if (this.rng.chance((perHour * k * dt) / 3600) && this.t > 120) this.runEvent({ type });
+      const roll = (this.eventRolls[type] ||= this.rng.fork('event:' + type)).chance((perHour * k * dt) / 3600);
+      if (roll && this.t > 120) this.runEvent({ type });
     }
   }
 
@@ -4547,7 +4728,7 @@ class World {
   wakeRequired(lead, fol) { return Math.max(this.settings.sepLateral, WAKE_NM[lead.wake]?.[fol.wake] || 0); }
 }
 
-return { SIM_DT, SWEEP, World };
+return { SIM_DT, SWEEP, depWakeSeconds, World };
 });
 __def("js/render/gl.js", function () {
 // Minimal WebGL2 toolkit: programs, render targets, and three batch types used by the radar:
@@ -25521,7 +25702,7 @@ class Panels {
     const ht = w.headTail(end.hdg);
     V.hx.textContent = `${ht.head >= 0 ? 'H' : 'T'}${Math.abs(Math.round(ht.head))} X${Math.round(Math.abs(ht.cross))}`;
     V.hx.style.color = ht.head < -5 || Math.abs(ht.cross) > 25 ? 'var(--alert)' : ht.head < 0 ? 'var(--warn)' : '';
-    V.qnh.textContent = `${s.qnh} hPa`;
+    V.qnh.textContent = `${s.qnh} hPa · TL FL${w.tl(ap)}`;  // TL from QNH and TA (CAP 493 Appendix A)
     V.vis.textContent = s.vis >= 9999 ? '10 km+' : s.vis >= 5000 ? `${(s.vis / 1000).toFixed(0)} km` : `${s.vis} m`;
     V.vis.style.color = s.vis < 1500 ? 'var(--alert)' : s.vis < 5000 ? 'var(--warn)' : '';
     V.cloud.textContent = `${s.cloud < 1000 ? 'BKN' : 'SCT'} ${s.cloud} ft${w.precip ? ' ' + w.precip : ''}`;
