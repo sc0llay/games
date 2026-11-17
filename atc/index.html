@@ -438,20 +438,43 @@ return { DEG, FT_PER_NM, norm360, angleDiff, hdgVec, bearing, dist, clamp, lerp,
 });
 __def("js/core/storage.js", function () {
 // localStorage wrapped so the game still works when storage is blocked (file://, private mode, policies).
+// Everything lives under "atc.<key>". Values written by versioned callers are { v, data } envelopes (see settings.js).
 const mem = {};
+const PREFIX = 'atc.';
 function load(key, fallback) {
   try {
-    const v = window.localStorage.getItem('atc.' + key);
-    if (v != null) return JSON.parse(v);
+    const v = window.localStorage.getItem(PREFIX + key);
+    if (v != null) {
+      try { return JSON.parse(v); }
+      catch (e) {
+        // unreadable JSON (truncated write, hand edit): keep a copy for inspection, then behave as if nothing was saved
+        try { window.localStorage.setItem(PREFIX + key + '.bad', v); } catch (e2) { /* ignore */ }
+        return key in mem ? mem[key] : fallback;
+      }
+    }
   } catch (e) { if (key in mem) return mem[key]; }
   return key in mem ? mem[key] : fallback;
 }
 function save(key, value) {
   mem[key] = value;
-  try { window.localStorage.setItem('atc.' + key, JSON.stringify(value)); return true; } catch (e) { return false; }
+  try { window.localStorage.setItem(PREFIX + key, JSON.stringify(value)); return true; } catch (e) { return false; }
+}
+// Forget one key (and its .bad backup), in memory and in storage.
+function remove(key) {
+  delete mem[key];
+  try { window.localStorage.removeItem(PREFIX + key); window.localStorage.removeItem(PREFIX + key + '.bad'); } catch (e) { /* ignore */ }
+}
+// Forget everything this game stored.
+function clearAll() {
+  for (const k of Object.keys(mem)) delete mem[k];
+  try {
+    const ls = window.localStorage, gone = [];
+    for (let i = 0; i < ls.length; i++) { const k = ls.key(i); if (k && k.startsWith(PREFIX)) gone.push(k); }
+    for (const k of gone) ls.removeItem(k);
+  } catch (e) { /* ignore */ }
 }
 
-return { load, save };
+return { load, save, remove, clearAll };
 });
 __def("js/data/aircraft.js", function () {
 // Aircraft performance by type. Speeds are IAS (kt), rates in ft/min, accel/decel in kt/s.
@@ -566,7 +589,7 @@ return { AIRCRAFT_TYPES, SPECIALS, CLASS_NAMES, WAKE_NM, OPERATORS };
 });
 __def("js/core/settings.js", function () {
 // Game settings, difficulty presets and persistent progress (lifetime landings -> special aircraft unlocks).
-const { load, save } = __m("js/core/storage.js");
+const { load, save, clearAll } = __m("js/core/storage.js");
 const { SPECIALS } = __m("js/data/aircraft.js");
 const DEFAULTS = {
   preset: 'standard',
@@ -598,17 +621,66 @@ const PRESETS = {
 };
 
 const SIM_SPEEDS = [1, 5, 25];
-function loadSettings() {
-  const s = { ...DEFAULTS, ...load('settings', {}) };
-  if (!SIM_SPEEDS.includes(s.simSpeed)) s.simSpeed = 1; // older saves had 2× / 4×
+
+// ---- persisted data: versioned envelope + validation ----
+// Stored as { v: STORE_VERSION, data }. Version 1 (no envelope) was the bare object. Whatever is read back is checked field by
+// field against DEFAULTS (type, range, allowed values), so a hand-edited, truncated or older save can never break boot:
+// bad fields fall back to their defaults, unknown fields are dropped.
+const STORE_VERSION = 2;
+const ENUMS = { preset: [...Object.keys(PRESETS), 'custom'], assist: ['off', 'training', 'custom', 'all'], assistSkill: ['standard', 'flawless'], style: ['phosphor', 'digital'] };
+const RANGES = {   // [min, max]; out-of-range numbers are clamped
+  density: [0, 1], arrivalRate: [1, 120], respMin: 0, respMax: 0, readbackError: [0, 1], weatherSeverity: [0, 3], sepLateral: [1, 20],
+  eventRate: [0, 5], volume: [0, 1], vectorMin: [0, 10], trails: [0, 30], uiScale: [0.5, 3],
+};
+RANGES.respMin = [0, 60]; RANGES.respMax = [0, 120];
+const SELECTS = { sepVertical: [1000, 2000], simSpeed: SIM_SPEEDS, vectorMin: [0, 1, 2, 5] };
+const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+// Unwraps a stored value to { v, data }. A bare object (version 1) is returned with v = 1.
+function unwrapStored(raw) {
+  if (isObj(raw) && typeof raw.v === 'number' && 'data' in raw) return { v: raw.v, data: raw.data };
+  return { v: 1, data: raw };
+}
+function sanitiseSettings(raw) {
+  const s = { ...DEFAULTS };
+  if (isObj(DEFAULTS.assistOjti)) s.assistOjti = {};
+  if (!isObj(raw)) return s;
+  for (const k of Object.keys(DEFAULTS)) {
+    if (!(k in raw)) continue;
+    const v = raw[k], d = DEFAULTS[k];
+    if (SELECTS[k]) { if (SELECTS[k].includes(v)) s[k] = v; continue; }   // older saves had simSpeed 2 / 4: those fall back to 1
+    if (ENUMS[k]) { if (ENUMS[k].includes(v)) s[k] = v; continue; }
+    if (k === 'assistOjti') { if (isObj(v)) { s[k] = {}; for (const t of Object.keys(v)) if (typeof v[t] === 'boolean') s[k][t] = v[t]; } continue; }
+    if (typeof d === 'boolean') { if (typeof v === 'boolean') s[k] = v; }
+    else if (typeof d === 'number') {
+      if (typeof v === 'number' && Number.isFinite(v)) { const r = RANGES[k]; s[k] = r ? Math.min(r[1], Math.max(r[0], v)) : v; }
+    }
+    else if (typeof d === 'string') { if (typeof v === 'string') s[k] = v; }
+  }
+  if (s.respMax < s.respMin) s.respMax = s.respMin;
   return s;
 }
-function saveSettings(s) { save('settings', s); }
+function sanitiseProgress(raw) {
+  const p = { landings: 0, unlocked: [], best: {}, seen: [], tutorialDone: false, training: null };
+  if (!isObj(raw)) return p;
+  if (typeof raw.landings === 'number' && Number.isFinite(raw.landings) && raw.landings >= 0) p.landings = Math.floor(raw.landings);
+  if (Array.isArray(raw.unlocked)) p.unlocked = raw.unlocked.filter(t => typeof t === 'string');
+  if (Array.isArray(raw.seen)) p.seen = raw.seen.filter(t => typeof t === 'string' || typeof t === 'number');
+  if (isObj(raw.best)) p.best = raw.best;
+  if (typeof raw.tutorialDone === 'boolean') p.tutorialDone = raw.tutorialDone;
+  if (isObj(raw.training)) p.training = raw.training;
+  return p;
+}
+
+function loadSettings() { return sanitiseSettings(unwrapStored(load('settings', null)).data); }
+function saveSettings(s) { save('settings', { v: STORE_VERSION, data: s }); }
 function applyPreset(s, name) { Object.assign(s, PRESETS[name] || {}); s.preset = name; return s; }
 
 // ---- progress / unlocks ----
-function loadProgress() { return { landings: 0, unlocked: [], best: {}, seen: [], tutorialDone: false, training: null, ...load('progress', {}) }; }
-function saveProgress(p) { save('progress', p); }
+function loadProgress() { return sanitiseProgress(unwrapStored(load('progress', null)).data); }
+function saveProgress(p) { save('progress', { v: STORE_VERSION, data: p }); }
+// "Reset saved data": forgets settings and progress (a menu can call this and reload).
+function resetSavedData() { clearAll(); }
 // Adds landings, returns the specials newly unlocked by this addition.
 function addLandings(p, n) {
   p.landings += n;
@@ -619,7 +691,7 @@ function addLandings(p, n) {
 }
 function nextUnlock(p) { return SPECIALS.find(s => !p.unlocked.includes(s.type)) || null; }
 
-return { DEFAULTS, PRESETS, SIM_SPEEDS, loadSettings, saveSettings, applyPreset, loadProgress, saveProgress, addLandings, nextUnlock };
+return { DEFAULTS, PRESETS, SIM_SPEEDS, STORE_VERSION, unwrapStored, sanitiseSettings, sanitiseProgress, loadSettings, saveSettings, applyPreset, loadProgress, saveProgress, resetSavedData, addLandings, nextUnlock };
 });
 __def("js/data/geo.gen.js", function () {
 // GENERATED by tools/geo.py from real elevation data - do not edit. Real-world coast, contours, spot heights and MVA.
@@ -6773,12 +6845,25 @@ __def("js/render/geoPack.js", function () {
 // A pack holds three nested images (half-widths 6, 24 and 80 nm) and two height grids (12 and 80 nm), all already
 // in the sim frame: x east, y north, nm from the ARP, row 0 at the north edge.
 const ready = {}, asked = {};
+// Only the last MAX_PACKS decoded packs are kept (each is ~10 MB of strings, grids and pixels). An evicted one is fetched again,
+// from the browser's own HTTP cache, if its airport is opened later.
+const MAX_PACKS = 2, order = [];
+
+// decoded <img> for a data URI: decode() runs off the main thread so the later GL upload does not stall the frame
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const el = new Image(); el.onload = () => (el.decode ? el.decode().catch(() => {}) : Promise.resolve()).then(() => res(el)); el.onerror = () => rej(new Error('image failed to decode')); el.src = src;
+  });
+}
 
 function decode(raw) {
+  if (!raw || !Array.isArray(raw.dem) || raw.dem.length < 2 || !Array.isArray(raw.img) || raw.img.length < 3) throw new Error('malformed pack');
   const dem = raw.dem.map(d => {
-    const bin = atob(d.b64), a = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-    return { half: d.half, n: d.n, h: new Int16Array(a.buffer) };
+    let a;
+    if (typeof Uint8Array.fromBase64 === 'function') a = Uint8Array.fromBase64(d.b64);
+    else { const bin = atob(d.b64); a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); }
+    if (a.length !== d.n * d.n * 2) throw new Error(`height grid is ${a.length} bytes, expected ${d.n * d.n * 2}`);
+    return { half: d.half, n: d.n, h: new Int16Array(a.buffer, a.byteOffset, a.length >> 1) };
   });
   const at = (d, x, y) => {
     const n = d.n, gx = Math.min(Math.max((x + d.half) / (2 * d.half) * n - 0.5, 0), n - 1.001), gy = Math.min(Math.max((d.half - y) / (2 * d.half) * n - 0.5, 0), n - 1.001);
@@ -6792,9 +6877,7 @@ function decode(raw) {
     if (m >= e) return at(wide, x, y);
     return m > e - 1.5 ? at(near, x, y) + (at(wide, x, y) - at(near, x, y)) * (m - (e - 1.5)) / 1.5 : at(near, x, y);
   };
-  return Promise.all(raw.img.map(im => new Promise((res, rej) => {
-    const el = new Image(); el.onload = () => res({ half: im.half, el }); el.onerror = rej; el.src = im.src;
-  }))).then(img => {
+  return Promise.all(raw.img.map(im => loadImage(im.src).then(el => ({ half: im.half, el, src: im.src })))).then(img => {
     // pixels of the closest image, for classifying the ground (woodland) where the scenery is dressed
     let px = null;
     try {
@@ -6807,7 +6890,16 @@ function decode(raw) {
       const i = Math.min(px.s - 1, Math.floor((x + px.half) / (2 * px.half) * px.s)), j = Math.min(px.s - 1, Math.floor((px.half - y) / (2 * px.half) * px.s)), o = (j * px.s + i) * 4;
       return [px.d[o] / 255, px.d[o + 1] / 255, px.d[o + 2] / 255];
     };
-    return { id: raw.id, lat: raw.lat, lon: raw.lon, rot: raw.rot, lay: raw.lay || null, img, heightAt, colourAt };
+    const pack = {
+      id: raw.id, lat: raw.lat, lon: raw.lon, rot: raw.rot, lay: raw.lay || null, img, heightAt, colourAt,
+      // The decoded images (2048 px, ~17 MB each) are only needed to upload the textures: release() drops them once the GL
+      // textures hold the pixels (the compressed data URIs stay, ~3x smaller), and acquire() decodes them again if the
+      // textures have to be rebuilt.
+      release() { for (const im of img) { if (im.el) { im.el.onload = im.el.onerror = null; im.el = null; } } },
+      acquire() { return Promise.all(img.map(im => im.el ? im.el : loadImage(im.src).then(el => (im.el = el)))).then(() => pack); },
+      drop() { this.release(); for (const im of img) im.src = ''; },
+    };
+    return pack;
   });
 }
 
@@ -6834,7 +6926,7 @@ function fail(id, why, el, timer) {
 
 // The decoded pack if it has arrived, else null (and the load is started, or retried after a failure).
 function geoPack(id) {
-  if (ready[id]) return ready[id];
+  if (ready[id]) { const i = order.indexOf(id); if (i >= 0 && i < order.length - 1) { order.splice(i, 1); order.push(id); } return ready[id]; }
   if (asked[id] || typeof document === 'undefined' || typeof Image === 'undefined') return null;
   if (retryAt[id] && performance.now() < retryAt[id]) return null;
   asked[id] = true;
@@ -6843,7 +6935,11 @@ function geoPack(id) {
   s.onload = () => {
     const raw = W.__ATC_GEO && W.__ATC_GEO[id];
     if (!raw) { fail(id, 'script loaded but holds no pack', s, timer); return; }
-    decode(raw).then(p => { clearTimeout(timer); ready[id] = p; delete W.__ATC_GEO[id]; if (s.parentNode) s.remove(); }, e => fail(id, 'decode failed: ' + (e && e.message || e), s, timer));
+    let d; try { d = decode(raw); } catch (e) { fail(id, 'decode failed: ' + (e && e.message || e), s, timer); return; }
+    d.then(p => {
+      clearTimeout(timer); ready[id] = p; delete W.__ATC_GEO[id]; if (s.parentNode) s.remove(); tries[id] = 0; order.push(id);
+      while (order.length > MAX_PACKS) { const old = order.shift(), q = ready[old]; delete ready[old]; asked[old] = false; if (q) q.drop(); }
+    }, e => fail(id, 'decode failed: ' + (e && e.message || e), s, timer));
   };
   s.onerror = () => fail(id, 'script failed to load', s, timer);
   s.src = 'geo/' + id + '.js'; s.async = true;
@@ -6859,7 +6955,107 @@ __def("js/render/geoLive.js", function () {
 // Offline (or with the setting off) nothing is asked for and the pack's own imagery is all there is.
 const TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const LIVE_CREDIT = 'Imagery © Esri, Maxar, Earthstar Geographics';
-const R_NM = 3440.065, RAD = Math.PI / 180, MAX_Z = 18, CACHE = 900;
+const R_NM = 3440.065, RAD = Math.PI / 180, MAX_Z = 18, SETTLE_ASK_MS = 400;
+
+// ---- the tile loader, shared by every GeoLive (all views, all airports) ----
+// One in-memory cache keyed by z/x/y (LRU by Map insertion order), at most MAX_INFLIGHT requests in flight, the queue served
+// nearest-the-centre first, and anything no framing wants any more dropped from the queue or aborted. A circuit breaker stops a
+// dead network (captive portal, blocked DNS) from being hammered. Tiles are held in memory only: nothing is written to disk,
+// IndexedDB or CacheStorage, and nothing is asked for beyond what a view currently covers.
+const CACHE = 700, EVICT_TO = 600, MAX_INFLIGHT = 8, RETRY_BAD_MS = 60000, BREAKER_N = 6, BREAKER_MS = 300000, BREAKER_MAX_MS = 1800000;
+const mkImage = () => { const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async'; return img; };
+
+const tileStore = {
+  cache: new Map(),        // key -> { key, z, x, y, img, state: 'q' | 'l' | 'ok' | 'bad', bad, pri, users: Set<GeoLive> }
+  queue: [],               // entries waiting for a slot
+  inflight: 0, fails: 0, trips: 0, blockedUntil: 0,
+  started: 0, aborted: 0,  // counters (diagnostics and tests)
+  mk: mkImage,             // image factory (replaced in tests)
+  url: (z, x, y) => TILE_URL.replace('{z}', z).replace('{y}', y).replace('{x}', x),
+  now: () => performance.now(),
+
+  blocked() { return this.now() < this.blockedUntil; },
+  reset() { this.cancelAll(); this.cache.clear(); this.queue.length = 0; this.inflight = 0; this.fails = 0; this.trips = 0; this.blockedUntil = 0; this.started = this.aborted = 0; },
+  clearBreaker() { this.fails = 0; this.trips = 0; this.blockedUntil = 0; },
+
+  // `user` wants the tile; returns the entry ('ok' ones are ready to paint, others will call user.tileReady when they land)
+  want(user, z, x, y, pri) {
+    const key = z + '/' + x + '/' + y, now = this.now();
+    let e = this.cache.get(key);
+    if (e && e.state === 'bad') { if (now - e.bad <= RETRY_BAD_MS || this.blocked()) return e; this.cache.delete(key); e = null; }
+    if (e) { this.cache.delete(key); this.cache.set(key, e); }          // LRU touch
+    else {
+      if (this.blocked()) return null;
+      e = { key, z, x, y, img: null, state: 'q', bad: 0, pri, users: new Set() };
+      this.cache.set(key, e); this.queue.push(e); this.evict();
+    }
+    e.users.add(user); if (e.state === 'q') e.pri = pri;
+    this.pump();
+    return e;
+  },
+
+  // `user` no longer wants these: drop what is still queued, abort what is in flight, keep what has loaded
+  unwant(user, entries) {
+    for (const e of entries) {
+      e.users.delete(user);
+      if (e.users.size) continue;
+      if (e.state === 'q') { const i = this.queue.indexOf(e); if (i >= 0) this.queue.splice(i, 1); this.cache.delete(e.key); }
+      else if (e.state === 'l') this.abort(e);
+    }
+    this.pump();
+  },
+
+  abort(e) {
+    const img = e.img; e.img = null;
+    if (img) { img.onload = img.onerror = null; try { img.src = ''; } catch (err) { /* ignore */ } }
+    if (e.state === 'l') this.inflight = Math.max(0, this.inflight - 1);
+    this.aborted++; this.cache.delete(e.key);
+  },
+
+  cancelAll() { for (const e of [...this.cache.values()]) if (e.state === 'l') this.abort(e); for (const e of this.queue) this.cache.delete(e.key); this.queue.length = 0; },
+
+  pump() {
+    while (this.inflight < MAX_INFLIGHT && this.queue.length && !this.blocked()) {
+      let bi = 0;
+      for (let i = 1; i < this.queue.length; i++) if (this.queue[i].pri < this.queue[bi].pri) bi = i;
+      const e = this.queue.splice(bi, 1)[0];
+      if (!e.users.size) { this.cache.delete(e.key); continue; }
+      this.start(e);
+    }
+  },
+
+  start(e) {
+    e.state = 'l'; this.inflight++; this.started++;
+    const img = e.img = this.mk();
+    img.onload = () => {
+      if (e.state !== 'l') return;
+      e.state = 'ok'; this.inflight--; this.fails = 0; this.trips = 0;
+      for (const u of e.users) u.tileReady(e);
+      this.pump();
+    };
+    img.onerror = () => {
+      if (e.state !== 'l') return;
+      e.state = 'bad'; e.bad = this.now(); e.img = null; this.inflight--;
+      if (++this.fails >= BREAKER_N) {      // the network looks dead: stop asking for a while (5 min, doubling to 30)
+        this.blockedUntil = this.now() + Math.min(BREAKER_MAX_MS, BREAKER_MS * 2 ** this.trips); this.trips++; this.fails = 0;
+        for (const q of this.queue) this.cache.delete(q.key);
+        this.queue.length = 0;
+      }
+      this.pump();
+    };
+    img.src = this.url(e.z, e.x, e.y);
+  },
+
+  // keep the cache bounded: drop the least recently used tiles that are not being fetched
+  evict() {
+    if (this.cache.size <= CACHE) return;
+    for (const [k, e] of this.cache) {
+      if (this.cache.size <= EVICT_TO) break;
+      if (e.state === 'ok' || e.state === 'bad') this.cache.delete(k);
+    }
+  },
+};
+if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('online', () => tileStore.clearBreaker());
 
 class GeoLive {
   // size: canvas pixels; maxZ / maxTiles bound what one framing may ask the tile server for
@@ -6870,7 +7066,9 @@ class GeoLive {
     this.g = this.canvas.getContext('2d');
     this.old = document.createElement('canvas'); this.old.width = this.old.height = SIZE;
     this.region = null;            // { x, y, half } nm: what the canvas covers
-    this.tiles = new Map();        // key -> { img, ok, bad, t }
+    this.wanted = new Map();       // key -> tile entry (tileStore) this framing is waiting on or painted from
+    this.deferred = null; this.deferAt = 0;   // uncached tiles of a fresh re-plan, asked for once the framing has settled
+    this.stale = false;
     this.dirty = false; this.drawn = 0; this.want = []; this.z = 0;
   }
 
@@ -6891,10 +7089,14 @@ class GeoLive {
 
   // Ask for the square about (x, y) of half-width `half` nm. Cheap to call every frame.
   view(x, y, half) {
-    const R = this.region;
-    if (R && Math.abs(Math.log(half / R.half)) < 0.22 && Math.max(Math.abs(x - R.x), Math.abs(y - R.y)) < R.half * 0.18) return;
-    const now = performance.now();
-    if (R && now - this.moved < 180) return;           // let a drag or a wheel spin settle a little
+    const R = this.region, now = performance.now();
+    if (this.deferred && now >= this.deferAt) this.flush();
+    const forced = this.stale; this.stale = false;
+    if (forced) { /* shown again after a cancel(): re-plan at once, whatever has not landed is asked for again */ }
+    else if (R) {
+      if (Math.abs(Math.log(half / R.half)) < 0.22 && Math.max(Math.abs(x - R.x), Math.abs(y - R.y)) < R.half * 0.18) return;
+      if (now - this.moved < 180) return;               // let a drag or a wheel spin settle a little
+    }
     this.moved = now;
     const SIZE = this.size;
     // carry what is already drawn across to the new framing so the ground never blinks back to the pack
@@ -6914,39 +7116,63 @@ class GeoLive {
     }
     x0 = Math.floor(x0); x1 = Math.floor(x1); y0 = Math.floor(y0); y1 = Math.floor(y1);
     this.want = [];
-    if ((x1 - x0 + 1) * (y1 - y0 + 1) > this.maxTiles) return;
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) this.want.push([z, tx, ty]);
-    this.want.sort((a, b) => Math.hypot(a[1] - cx, a[2] - cy) - Math.hypot(b[1] - cx, b[2] - cy));
-    for (const [tz, tx, ty] of this.want) this.ask(tz, tx, ty);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) <= this.maxTiles) {
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) this.want.push([z, tx, ty]);
+      this.want.sort((a, b) => Math.hypot(a[1] - cx, a[2] - cy) - Math.hypot(b[1] - cx, b[2] - cy));
+    }
+    this.plan(R && !forced ? SETTLE_ASK_MS : 0);
     this.dirty = true;
   }
 
-  ask(z, tx, ty) {
-    const key = z + '/' + tx + '/' + ty, now = performance.now();
-    let t = this.tiles.get(key);
-    if (t) { t.t = now; if (t.ok) this.paint(t, z, tx, ty); else if (t.bad && now - t.bad > 60000) { this.tiles.delete(key); t = null; } }
-    if (t) return;
-    const img = new Image(); t = { img, ok: false, bad: 0, t: now }; this.tiles.set(key, t);
-    img.crossOrigin = 'anonymous'; img.decoding = 'async';
-    img.onload = () => { t.ok = true; if (this.z === z) this.paint(t, z, tx, ty); };
-    img.onerror = () => { t.bad = performance.now(); };
-    img.src = TILE_URL.replace('{z}', z).replace('{y}', ty).replace('{x}', tx);
-    if (this.tiles.size > CACHE) {
-      const old = [...this.tiles.entries()].sort((a, b) => a[1].t - b[1].t).slice(0, CACHE / 4);
-      for (const [k, v] of old) { v.img.onload = v.img.onerror = null; v.img.src = ''; this.tiles.delete(k); }
+  // Reconcile the shared tile store with the new `want`: tiles of the old framing nobody needs any more are dropped from the
+  // queue or aborted; cached tiles are painted at once; the rest are asked for after `delay` ms of a steady framing (so
+  // zooming or dragging through several levels does not fetch tiles that are never seen).
+  plan(delay) {
+    const keep = new Map(), missing = [];
+    this.want.forEach(([z, tx, ty], i) => {
+      const key = z + '/' + tx + '/' + ty, e = this.wanted.get(key) || tileStore.cache.get(key);
+      const prev = this.wanted.get(key);
+      if (e && e.state === 'ok') { e.users.add(this); keep.set(key, e); this.paint(e); }
+      else if (prev && prev.state !== 'bad') keep.set(key, prev);          // already queued or in flight for this view
+      else missing.push([z, tx, ty, i]);
+    });
+    const drop = [];
+    for (const [k, e] of this.wanted) if (!keep.has(k)) drop.push(e);
+    this.wanted = keep;
+    if (drop.length) tileStore.unwant(this, drop);
+    this.deferred = missing.length ? missing : null; this.deferAt = performance.now() + delay;
+    if (this.deferred && !delay) this.flush();
+  }
+
+  // ask the store for the tiles still missing from the current framing
+  flush() {
+    const list = this.deferred; this.deferred = null; if (!list) return;
+    for (const [z, tx, ty, i] of list) {
+      const e = tileStore.want(this, z, tx, ty, i); if (!e) continue;
+      this.wanted.set(e.key, e); if (e.state === 'ok') this.paint(e);
     }
   }
 
+  // the store finished a tile this framing is waiting on
+  tileReady(e) { if (this.z === e.z && this.wanted.has(e.key)) this.paint(e); }
+
+  // stop everything in flight for this view (tower hidden, airport left); the next view() asks again for what is missing
+  cancel() {
+    const all = [...this.wanted.values()]; this.wanted = new Map(); this.deferred = null; this.stale = true;
+    if (all.length) tileStore.unwant(this, all);
+  }
+  dispose() { this.cancel(); this.region = null; this.stale = false; this.canvas.width = this.canvas.height = this.old.width = this.old.height = 1; }
+
   // a tile is small enough to be an affine patch in the sim frame: place it by three of its corners
-  paint(t, z, tx, ty) {
-    const R = this.region; if (!R) return;
-    const SIZE = this.size, n = 2 ** z, k = SIZE / (2 * R.half), P = (x, y) => [(x - (R.x - R.half)) * k, ((R.y + R.half) - y) * k];
+  paint(t) {
+    const R = this.region; if (!R || !t.img) return;
+    const z = t.z, tx = t.x, ty = t.y, SIZE = this.size, n = 2 ** z, k = SIZE / (2 * R.half), P = (x, y) => [(x - (R.x - R.half)) * k, ((R.y + R.half) - y) * k];
     const a = P(...this.cornerXY(tx, ty, n)), b = P(...this.cornerXY(tx + 1, ty, n)), c = P(...this.cornerXY(tx, ty + 1, n));
     const w = t.img.naturalWidth || 256, o = 0.6 / w;   // a hair of overlap hides the seams
     const ux = (b[0] - a[0]) / w, uy = (b[1] - a[1]) / w, vx = (c[0] - a[0]) / w, vy = (c[1] - a[1]) / w;
     this.g.setTransform(ux * (1 + 2 * o), uy * (1 + 2 * o), vx * (1 + 2 * o), vy * (1 + 2 * o), a[0] - (ux + vx) * 0.6, a[1] - (uy + vy) * 0.6);
-    try { this.g.drawImage(t.img, 0, 0); this.dirty = true; } catch (e) { t.ok = false; t.bad = performance.now(); }
+    try { this.g.drawImage(t.img, 0, 0); this.dirty = true; } catch (e) { t.state = 'bad'; t.bad = performance.now(); }
   }
 
   // true when the canvas has changed since the last call (at most a few times a second)
@@ -6957,7 +7183,7 @@ class GeoLive {
   }
 }
 
-return { LIVE_CREDIT, GeoLive };
+return { LIVE_CREDIT, tileStore, GeoLive };
 });
 __def("js/render/models/A10.js", function () {
 // Fairchild Republic A-10C Thunderbolt II — high-detail tower-view model.
@@ -23912,8 +24138,8 @@ class Tower {
     canvas.addEventListener('webglcontextrestored', () => {
       // every GL object died with the context: drop the stale handles, recreate the shared ones and force a scene rebuild
       try {
-        for (const k of ['geoTex', 'liveTex', 'nearTex', 'rwTex', 'rwWear', 'terrainVao', 'terrainVbo', 'terrainIbo', 'paveVao', 'paveVbo']) this[k] = null;
-        this.live = this.near = null; this.liveOn = this.nearOn = false;
+        for (const k of ['geoFor', 'geoTex', 'liveTex', 'nearTex', 'rwTex', 'rwWear', 'terrainVao', 'terrainVbo', 'terrainIbo', 'paveVao', 'paveVbo']) this[k] = null;
+        this.live = this.near = null; this.liveOn = this.nearOn = false; this.geoOk = false; this.pendingGeo = null;
         this.initGL(); this.apKey = null; this.ap = null; this.lost = false;
       } catch (e) { console.warn('tower: could not rebuild after context loss', e); }
     });
@@ -24063,6 +24289,9 @@ class Tower {
     const gl = this.gl;
     if (!this.geoTex) this.geoTex = [0, 1, 2].map(() => gl.createTexture());
     const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+    // the tile cache is shared (geoLive.js), so a fresh view of the same ground costs no requests; just stop the old ones
+    if (this.live) this.live.dispose();
+    if (this.near) this.near.dispose();
     this.live = null; this.liveOn = false; this.near = null; this.nearOn = false;
     if (!this.liveTex) {
       this.liveTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.liveTex);
@@ -24079,11 +24308,11 @@ class Tower {
     }
     if (geo) { try { this.live = new GeoLive(geo); } catch (e) { this.live = null; } }
     if (geo && gl.getParameter(gl.MAX_TEXTURE_SIZE) >= 4096) { try { this.near = new GeoLive(geo, 4096, 17, 340); } catch (e) { this.near = null; } }
-    this.geoTex.forEach((t, i) => {
+    const upload = (els) => this.geoTex.forEach((t, i) => {
       gl.bindTexture(gl.TEXTURE_2D, t);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      if (geo) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, gl.RGB, gl.UNSIGNED_BYTE, geo.img[i].el);
+      if (els) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, gl.RGB, gl.UNSIGNED_BYTE, els[i]);
         gl.generateMipmap(gl.TEXTURE_2D);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
@@ -24094,6 +24323,21 @@ class Tower {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     });
+    this.pendingGeo = null;
+    if (geo && this.geoFor === geo && this.geoOk) { /* the textures already hold this pack */ }
+    else if (!geo) { upload(null); this.geoFor = null; this.geoOk = false; }
+    else if (geo.img.every(im => im.el)) {
+      upload(geo.img.map(im => im.el)); this.geoFor = geo; this.geoOk = true;
+      geo.release();                       // the textures own the pixels now: let the decoded 2048 px images go (~50 MB)
+    } else {
+      // the pack's decoded images were released (a revisit): decode them again, off the main thread, and upload when ready
+      upload(null); this.geoFor = null; this.geoOk = false; this.pendingGeo = geo;
+      geo.acquire().then(() => {
+        if (this.pendingGeo !== geo || this.lost) { geo.release(); return; }
+        this.pendingGeo = null; upload(geo.img.map(im => im.el)); gl.bindTexture(gl.TEXTURE_2D, null);
+        this.geoFor = geo; this.geoOk = true; geo.release();
+      }, e => { if (this.pendingGeo === geo) this.pendingGeo = null; console.warn('tower: could not rebuild the pack imagery', e); });
+    }
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
@@ -24181,7 +24425,10 @@ class Tower {
     if (!this.btns) return;
     for (const [id, b] of Object.entries(this.btns)) b.classList.toggle('on', id === 'binos' ? this.binos : id === 'frame' ? this.showFrame : id === this.preset);
   }
-  setVisible(on) { if (this.bar) this.bar.hidden = !on; }
+  setVisible(on) {
+    if (this.bar) this.bar.hidden = !on;
+    if (!on) { if (this.live) this.live.cancel(); if (this.near) this.near.cancel(); }   // no tiles keep downloading behind the radar view
+  }
   setPreset(id) {
     if (id === 'binos') { this.binos = !this.binos; this.tFov = this.binos ? 8 * DEG : this.presetFov ?? 50 * DEG; if (!this.binos) this.needAim = true; }
     else if (id === 'frame') this.showFrame = !this.showFrame;
@@ -24601,7 +24848,7 @@ class Tower {
     gl.uniform4fv(p.u.uRwy, this.strips); gl.uniform2fv(p.u.uRwyD, this.stripD); gl.uniform1i(p.u.uNRwy, this.nStrips);
     // streamed aerial tiles for what is in view (the whole frame from above, the airfield's surroundings otherwise)
     let lr = null;
-    if (this.live && f.settings.liveImagery !== false && navigator.onLine !== false) {
+    if (this.live && f.settings.liveImagery !== false && navigator.onLine !== false && !document.hidden) {
       if (top) this.live.view(this.top.x, this.top.y, this.top.span * Math.max(1, W / H) * 1.04); else this.live.view(0, 0, 3.2);
       if (this.live.take()) {
         gl.bindTexture(gl.TEXTURE_2D, this.liveTex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -24632,7 +24879,7 @@ class Tower {
     this.liveShown = !!lr;
     gl.uniform4f(p.u.uLive, lr ? lr.x : 0, lr ? lr.y : 0, lr ? lr.half : 1, lr ? 1 : 0);
     gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, this.liveTex); gl.uniform1i(p.u.uG3, 5);
-    gl.uniform1f(p.u.uGeo, S.geo ? 1 : 0);
+    gl.uniform1f(p.u.uGeo, S.geo && this.geoOk ? 1 : 0);
     for (let i = 0; i < 3; i++) { gl.activeTexture(gl.TEXTURE2 + i); gl.bindTexture(gl.TEXTURE_2D, this.geoTex[i]); gl.uniform1i(p.u['uG' + i], 2 + i); }
     gl.activeTexture(gl.TEXTURE0);
     gl.bindVertexArray(this.terrainVao); gl.drawElements(gl.TRIANGLES, this.terrainN, gl.UNSIGNED_INT, 0);
@@ -26414,11 +26661,14 @@ class Game {
     this.debriefShown = false;
     this.wireBus(this.bus);
     this.world = new World({ ...cfg, bus: this.bus, specials: this.progress.unlocked });
-    geoPack(this.world.ap.id);           // start fetching the real-world imagery pack for the tower view
     this.selectedId = null; this.hoverId = null; this.paused = false; this.acc = 0;
     this.cmds.reset();
     this.radial.hide();
     this.panels.build(this.world);
+    // The real-world imagery pack (8-11 MB) is only needed by the tower view, so it is not fetched at start: it loads on the
+    // first tower open (toggleTower), with a head start when the pointer or focus reaches the Tower button. Radar never uses it.
+    const apId = this.world.ap.id, warm = () => { if (!this.demo) geoPack(apId); };
+    if (this.panels.towerBtn) for (const ev of ['pointerenter', 'focus', 'touchstart']) this.panels.towerBtn.addEventListener(ev, warm, { passive: true, once: true });
     this.strips.build();
     this.training.build(this.world);
     this.radar.center(0, 0); this.radar.setRange(cfg.mode === 'tutorial' ? 32 : 40);
@@ -26519,6 +26769,7 @@ class Game {
       try { this.tower = new Tower($('#tower')); } catch (e) { this.menus.toast('Tower view needs WebGL2, which is unavailable here.', 'w'); return; }
     }
     this.towerOn = !this.towerOn;
+    if (this.towerOn && this.world) geoPack(this.world.ap.id);   // first open starts the imagery pack download (no-op if loaded/loading)
     if (this.towerOn && this.geoFailed) this.geoNotice();
     $('#tower').hidden = !this.towerOn;
     $('#gl').hidden = this.towerOn;
