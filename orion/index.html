@@ -23,6 +23,16 @@
 { "imports": { "three": "./vendor/three.module.js", "orion/": "./src/" } }
 </script>
 <!-- /ORION:IMPORTMAP -->
+<link rel="modulepreload" href="./vendor/three.module.js">
+<link rel="modulepreload" href="./src/main.js">
+<link rel="modulepreload" href="./src/core/app.js">
+<link rel="modulepreload" href="./src/ephemeris/index.js">
+<link rel="modulepreload" href="./src/stars/index.js">
+<link rel="modulepreload" href="./src/galaxy/index.js">
+<link rel="modulepreload" href="./src/render/bodies/index.js">
+<link rel="modulepreload" href="./src/render/small/index.js">
+<link rel="modulepreload" href="./src/ui/index.js">
+<link rel="preload" as="fetch" crossorigin href="./data/hyg.bin">
 </head>
 <body>
 <canvas id="scene" tabindex="0" aria-label="3D view of the Milky Way and the Solar System"></canvas>

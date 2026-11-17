@@ -53,9 +53,13 @@ async function boot() {
   watchContext(canvas);
   const app = createApp(canvas);
   globalThis.orion = app; // debugging handle
-  for (const spec of MODULES) {
+  // Fetch and evaluate every module in parallel; install() still runs serially in MODULES order.
+  const loads = MODULES.map((spec) => import(spec).then((mod) => ({ mod }), (err) => ({ err })));
+  for (let i = 0; i < MODULES.length; i++) {
+    const spec = MODULES[i];
     try {
-      const mod = await import(spec);
+      const { mod, err } = await loads[i];
+      if (err) throw err;
       // A module whose install never settles must not stall the rest of boot.
       await Promise.race([mod.install(app), new Promise((_, rej) => setTimeout(() => rej(new Error('install timed out')), 15000))]);
     } catch (err) {
@@ -70,9 +74,12 @@ async function boot() {
     if (start) app.camera.focusOn(start);
   }
   app.events.dispatchEvent(new Event('ready'));
+  // Compile everything before the first frame so it does not stall synchronously inside the render loop.
+  try {
+    await app.renderer.compileAsync(app.layers.system, app.cameras.system);
+    await app.renderer.compileAsync(app.layers.sky, app.cameras.sky);
+  } catch (err) { console.warn('[orion] shader precompile skipped', err); }
   app.start();
-  // Compile everything once before revealing the scene.
-  try { await app.renderer.compileAsync(app.layers.system, app.cameras.system); await app.renderer.compileAsync(app.layers.sky, app.cameras.sky); } catch {}
   const poster = document.getElementById('poster');
   if (poster) { poster.classList.add('gone'); setTimeout(() => poster.remove(), 1200); }
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { NOISE, HEIGHT_PACK, SPHERE_MATH } from 'orion/render/bodies/glsl.js';
+import { mapCaps, imageSize } from 'orion/render/bodies/math.js';
 import { decodeLandMask, LAND_W, LAND_H } from 'orion/render/bodies/landmask.js';
 
 // Procedural equirectangular surface maps, rendered once on the GPU into render targets.
@@ -538,6 +539,15 @@ onmessage = async (ev) => {
   } catch (e) { postMessage({ error: String(e && e.message || e) }); }
 };`;
 
+/** Dispose a photo texture and release its ImageBitmap even if it was never uploaded. */
+export function freeTexture(t) {
+  if (!t) return;
+  t.onUpdate = null;
+  const img = t.image;
+  t.dispose();
+  if (img && typeof img.close === 'function') { try { img.close(); } catch { /* ignore */ } }
+}
+
 export class PhotoLibrary {
   constructor(renderer, assets) {
     this.renderer = renderer; this.assets = assets;
@@ -551,18 +561,17 @@ export class PhotoLibrary {
   }
   entry(id) { return this.manifest?.bodies?.[id] || null; }
 
+  // Fetch once, decode once: when the file is bigger than `cap`, the resize happens inside the single decode.
   async #bitmap(path, cap) {
     const buf = await this.assets.buffer(path);
     if (!buf) throw new Error('missing ' + path);
     const blob = new Blob([buf]);
-    // Probe the size first so we only ask for a resize when the tier needs a smaller map.
-    let bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-    if (bmp.width > cap) {
-      const w = cap, h = Math.round(cap * bmp.height / bmp.width);
-      bmp.close();
-      bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none', resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
+    const opt = { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' };
+    const sz = imageSize(buf);
+    if (sz && sz.w > cap) {
+      return createImageBitmap(blob, { ...opt, resizeWidth: cap, resizeHeight: Math.max(1, Math.round(cap * sz.h / sz.w)), resizeQuality: 'high' });
     }
-    return bmp;
+    return createImageBitmap(blob, opt);
   }
   async #texture(path, cap, { srgb = false, red = false } = {}) {
     const bmp = await this.#bitmap(path, cap);
@@ -573,6 +582,9 @@ export class PhotoLibrary {
     t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
     t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true;
     t.anisotropy = Math.min(16, this.maxAniso);
+    t.userData.size = { width: bmp.width, height: bmp.height };
+    // The bitmap's pixels live on the GPU after upload; release the CPU-side copy.
+    t.onUpdate = () => { t.onUpdate = null; try { bmp.close(); } catch { /* already closed */ } };
     t.needsUpdate = true;
     return t;
   }
@@ -598,25 +610,39 @@ export class PhotoLibrary {
     }));
   }
 
-  /** Load every map of body `id` for the given tier. Resolves { entry, color, night, clouds, spec, normal, height }. */
+  /** Texture size caps for body `id` on this tier. */
+  caps(id, tierSettings = {}, tier = 'high') {
+    return mapCaps(id, tierSettings.maxTexture, tier, this.maxSize, BIG.has(id));
+  }
+  /** Load the maps named in `keys` (subset of color/night/clouds/spec/normal/height) at the given caps. Never rejects:
+   *  resolves { entry, tex: {key: Texture}, errors: {key: Error} } so one failed map cannot leak the others. */
+  async loadMaps(id, keys, caps) {
+    const e = this.entry(id);
+    if (!e) throw new Error('no photo maps for ' + id);
+    const m = e.maps, tex = {}, errors = {};
+    const run = (k) => {
+      if (!m[k]) return Promise.reject(new Error('no ' + k + ' map'));
+      switch (k) {
+        case 'color': return this.#texture(m.color, caps.color, { srgb: !!e.srgb, red: !!e.tint });
+        case 'night': return this.#texture(m.night, caps.night, { srgb: true });
+        case 'clouds': return this.#texture(m.clouds, caps.clouds, { red: true });
+        case 'spec': return this.#texture(m.spec, caps.spec, { red: true });
+        case 'normal': return this.#texture(m.normal, caps.normal);
+        case 'height': return e.height ? this.#height(m.height, e.height, caps.height) : Promise.reject(new Error('no height meta'));
+      }
+      return Promise.reject(new Error('unknown map ' + k));
+    };
+    const res = await Promise.allSettled(keys.map(run));
+    res.forEach((r, i) => { if (r.status === 'fulfilled') tex[keys[i]] = r.value; else errors[keys[i]] = r.reason; });
+    return { entry: e, tex, errors };
+  }
+  /** All maps for a body (used for Phobos). Resolves { entry, color, ... } or rejects if the colour map fails. */
   async load(id, tierSettings = {}, tier = 'high') {
     const e = this.entry(id);
     if (!e) throw new Error('no photo maps for ' + id);
-    const tierMax = Math.min(tierSettings.maxTexture || 4096, this.maxSize);
-    const capCol = BIG.has(id) || tier === 'ultra' ? tierMax : Math.min(tierMax, 4096);
-    const capAux = Math.min(tierMax, 4096);
-    const m = e.maps, out = { entry: e };
-    const jobs = [];
-    jobs.push(this.#texture(m.color, capCol, { srgb: !!e.srgb, red: !!e.tint }).then((t) => { out.color = t; }));
-    if (m.night) jobs.push(this.#texture(m.night, capAux, { srgb: true }).then((t) => { out.night = t; }));
-    if (m.clouds) jobs.push(this.#texture(m.clouds, tierMax, { red: true }).then((t) => { out.clouds = t; }));
-    if (m.spec) jobs.push(this.#texture(m.spec, capAux, { red: true }).then((t) => { out.spec = t; }));
-    if (m.normal) jobs.push(this.#texture(m.normal, capAux).then((t) => { out.normal = t; }));
-    if (m.height && e.height) jobs.push(this.#height(m.height, e.height, capCol).then((t) => { out.height = t; }));
-    try { await Promise.all(jobs); } catch (err) {
-      for (const k of ['color', 'night', 'clouds', 'spec', 'normal', 'height']) out[k]?.dispose();
-      throw err;
-    }
-    return out;
+    const keys = ['color', 'night', 'clouds', 'spec', 'normal', 'height'].filter((k) => e.maps[k]);
+    const { tex, errors } = await this.loadMaps(id, keys, this.caps(id, tierSettings, tier));
+    if (errors.color) { for (const t of Object.values(tex)) freeTexture(t); throw errors.color; }
+    return { entry: e, ...tex };
   }
 }

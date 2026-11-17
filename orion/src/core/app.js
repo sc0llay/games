@@ -69,7 +69,7 @@ export function createApp(canvas) {
     if (app.quality.lowPower && now - lastRender < 32) return;
     lastRender = now;
     const realDt = Math.max(0, Math.min(0.1, (now - last) / 1000)); // rAF timestamps can run behind performance.now()
-    app.quality.update(now - last);
+    const frameDt = now - last, cpuT0 = performance.now();
     last = now;
 
     const levelsBefore = app.frame?.levels;
@@ -124,9 +124,12 @@ export function createApp(canvas) {
     for (const { fn } of app._frameFns) {
       try { fn(app.frame); } catch (err) { console.error(err); }
     }
+    app.quality.begin();
     app.graph.render(app.frame);
+    app.quality.end();
     app.events.dispatchEvent(new CustomEvent('frame', { detail: app.frame }));
     if (levelsBefore && dominant(levelsBefore) !== dominant(levels)) app.events.dispatchEvent(new CustomEvent('level', { detail: dominant(levels) }));
+    app.quality.update(frameDt, performance.now() - cpuT0);
   }
   app.start = () => requestAnimationFrame(frameLoop);
   return app;

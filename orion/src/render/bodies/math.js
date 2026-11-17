@@ -120,3 +120,47 @@ export function pickOccluders(bodyId, bodyPos, bodyRadiusKm, cands, out, n = 4) 
 
 // Pixel diameter of a sphere of radius R at distance d for a vertical fov (rad) and viewport height (px).
 export const pixelDiameter = (R, d, fovY, hPx) => (2 * R / Math.max(d, 1e-9)) / (2 * Math.tan(fovY / 2)) * hPx;
+
+// ---- photographic-map streaming policy (pure; see index.js requestPhotos) ------------------------------------------
+export const COLOR_PX = 24;    // colour map is requested once the disc is this many device px wide
+export const DETAIL_PX = 120;  // normal / night / clouds / spec / height only from here
+
+/** Is a sphere of angular radius `angR` whose centre is `off` rad from the view axis in, or near, a frustum with the
+ *  given vertical half-fov and aspect? (Tested against the half-diagonal, with a 25% margin so maps arrive just
+ *  before the body pans into view.) */
+export function nearFrustum(off, angR, halfFovY, aspect) {
+  const t = Math.tan(halfFovY), diag = Math.atan(Math.sqrt(t * t * (1 + aspect * aspect)));
+  return off - angR <= diag * 1.25;
+}
+/** 0 = no photo maps, 1 = colour map only, 2 = all maps. */
+export function photoStage(px, inView) {
+  if (!inView) return 0;
+  return px >= DETAIL_PX ? 2 : px >= COLOR_PX ? 1 : 0;
+}
+/** Texture size caps (px wide) for body `id`; clouds are a greyscale mask and never need more than 4096. */
+export function mapCaps(id, tierMax, tier, deviceMax, big) {
+  const m = Math.min(tierMax || 4096, deviceMax || 4096);
+  const col = big || tier === 'ultra' ? m : Math.min(m, 4096);
+  const aux = Math.min(m, 4096);
+  return { color: col, night: aux, clouds: Math.min(m, 4096), spec: aux, normal: aux, height: col };
+}
+/** Pixel size of a PNG or JPEG from its header bytes, or null. */
+export function imageSize(buf) {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return { w: dv.getUint32(16), h: dv.getUint32(20) };
+  }
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1];
+      if (m === 0xff) { i++; continue; }
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: b[i + 5] << 8 | b[i + 6], w: b[i + 7] << 8 | b[i + 8] };
+      if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+      i += 2 + (b[i + 2] << 8 | b[i + 3]);
+    }
+  }
+  return null;
+}

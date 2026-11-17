@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TextureGenerator, PhotoLibrary } from 'orion/render/bodies/textures.js';
+import { TextureGenerator, PhotoLibrary, freeTexture } from 'orion/render/bodies/textures.js';
 import { ATMOS, atmosphereUniforms, AtmosphereSystem } from 'orion/render/bodies/atmosphere.js';
 import { createSurfaceMaterial, createCloudMaterial, createPhobosMaterial } from 'orion/render/bodies/surface.js';
 import { createGiantAurora, hasGiantAurora } from 'orion/render/bodies/giantAurora.js';
@@ -7,6 +7,7 @@ import { createSun, createSunGlow } from 'orion/render/bodies/sun.js';
 import {
   AU_KM, SUN_RADIUS_KM, MAX_SPOTS, sunspotGroups, solarActivity, solarCyclePhase,
   lambertPhase, reflectedFlux, apparentMagnitude, starPeak, pickOccluders, pixelDiameter,
+  nearFrustum, photoStage, COLOR_PX,
 } from 'orion/render/bodies/math.js';
 
 // Bodies renderer (spec §09): Sun, planets, moons, dwarf planets with procedural GPU-generated surfaces,
@@ -173,38 +174,109 @@ export async function install(app) {
     rec.U.uTexel.value.set(1 / w, 1 / h);
   }
 
-  // Photographic maps: loaded once a body is a few pixels wide; procedural maps if a body has none or loading fails.
-  function requestMaps(rec, ts, tier) {
-    const e = photos.entry(rec.id);
-    if (!e) { rec.maps = {}; if (rec.kind !== 'gas') generateMaps(rec, ts); return; }
-    rec.maps = { loading: true };
-    photos.load(rec.id, ts, tier).then((m) => {
-      const U = rec.U, mean = e.mean || [0.5, 0.5, 0.5];
-      U.tColor.value = m.color;
-      if (m.night) U.tNight.value = m.night;
-      if (m.clouds) U.tClouds.value = m.clouds;
-      if (m.spec) U.tSpec.value = m.spec;
-      if (m.normal) U.tNormal.value = m.normal;
-      if (m.height) {
-        U.tHeight.value = m.height;
-        U.uHTexel.value.set(1 / m.height.image.width, 1 / m.height.image.height);
-      }
-      // albedo scale from the manifest, capped so no channel's mean exceeds 0.85 (Neptune's map is very dark)
+  // ---- photographic maps ------------------------------------------------------------------------------------------
+  // Streamed by on-screen size and visibility: colour map at >= COLOR_PX, secondary maps at >= DETAIL_PX, only while the
+  // body is in or near the view. Texture caps follow the quality tier; a tier change evicts hidden bodies at once and
+  // reloads visible ones at the new size. Procedural (or placeholder) surfaces stand in until the photo maps arrive.
+  const PH_KEYS = ['color', 'night', 'clouds', 'spec', 'normal', 'height'];
+  const flatNormal = placeholder([128, 128, 255, 255], false);
+  for (const r of recs) r.U.tNormal.value = flatNormal;
+  const compileScene = new THREE.Scene();
+  // Compile `mat` off the render path (KHR_parallel_shader_compile) so swapping it in does not stall a frame.
+  function precompile(mesh, mat) {
+    if (typeof renderer.compileAsync !== 'function') return Promise.resolve();
+    const t = new THREE.Mesh(mesh.geometry, mat);
+    compileScene.add(t);
+    return Promise.resolve().then(() => renderer.compileAsync(compileScene, app.cameras.system)).catch(() => {}).then(() => { compileScene.remove(t); });
+  }
+  function phState(rec) { return rec.ph ??= { gen: 0, busy: false, tex: {}, caps: {}, failed: new Set(), photo: null, entry: photos.entry(rec.id) }; }
+  const capSig = (c) => PH_KEYS.map((k) => c[k]).join('/');
+
+  function applyPhotos(rec, ph, ts) {
+    const e = ph.entry, U = rec.U, T = ph.tex, mean = e.mean || [0.5, 0.5, 0.5];
+    if (!T.color) return;
+    const photo = { height: !!T.height, tint: !!e.tint };
+    const needMat = !ph.photo || ph.photo.height !== photo.height;
+    const needCloud = rec.cloud && T.clouds && !ph.cloudPhoto;
+    const mat = needMat ? createSurfaceMaterial(rec.kind, U, rec.atmoTint, photo) : null;
+    const cmat = needCloud ? createCloudMaterial(U, true) : null;
+    const gen = ph.gen;
+    const ready = Promise.all([mat && precompile(rec.surface, mat), cmat && precompile(rec.cloud, cmat)]);
+    ready.then(() => {
+      if (ph.gen !== gen || rec.ph !== ph) { mat?.dispose(); cmat?.dispose(); return; }   // evicted / superseded while compiling
+      U.tColor.value = T.color;
+      if (T.night) U.tNight.value = T.night;
+      if (T.clouds) U.tClouds.value = T.clouds;
+      if (T.spec) U.tSpec.value = T.spec;
+      if (T.normal) U.tNormal.value = T.normal;
+      if (T.height) { U.tHeight.value = T.height; U.uHTexel.value.set(1 / T.height.userData.hw, 1 / T.height.userData.hh); }
       U.uAlbScale.value = Math.min(e.scale ?? 1, 0.85 / Math.max(...mean, 1e-3));
       rec.uOff0 = -0.5 - (e.lon0 ?? -180) / 360; U.uUOff.value = rec.uOff0;
       if (e.tint) { U.uTintA.value.set(...e.tint[0]); U.uTintB.value.set(...e.tint[1]); }
       if (e.nodata) { const g = e.tint ? mean[0] : 0; e.tint ? U.uFill.value.setScalar(g) : U.uFill.value.set(...mean); }
       rec.grsU = e.grsU;
-      const photo = { height: !!m.height, tint: !!e.tint };
-      rec.surface.material.dispose();
-      rec.surface.material = createSurfaceMaterial(rec.kind, U, rec.atmoTint, photo);
-      if (rec.cloud && m.clouds) { rec.cloud.material.dispose(); rec.cloud.material = createCloudMaterial(U, true); }
-      rec.maps = m;
-    }).catch((err) => {
-      console.warn('[bodies] photo maps for', rec.id, 'failed; using procedural', err);
-      rec.maps = {}; if (rec.kind !== 'gas') generateMaps(rec, ts);
+      if (mat) { rec.surface.material.dispose(); rec.surface.material = mat; ph.photo = photo; }
+      if (cmat) { rec.cloud.material.dispose(); rec.cloud.material = cmat; ph.cloudPhoto = true; }
     });
   }
+
+  // Free every GPU texture of a body and put its procedural/placeholder surface back.
+  function evictPhotos(rec) {
+    const ph = rec.ph; if (!ph) return;
+    ph.gen++;                                   // in-flight loads and compiles for the old state are discarded
+    for (const k of PH_KEYS) freeTexture(ph.tex[k]);
+    const U = rec.U;
+    U.tColor.value = placeholder([0, 0, 0, 0], true); U.tNight.value = U.tClouds.value = U.tSpec.value = U.tHeight.value = blank; U.tNormal.value = flatNormal;
+    if (ph.photo) { rec.surface.material.dispose(); rec.surface.material = createSurfaceMaterial(rec.kind, U, rec.atmoTint); }
+    if (ph.cloudPhoto) { rec.cloud.material.dispose(); rec.cloud.material = createCloudMaterial(U); }
+    rec.ph = null; rec.uOff0 = undefined;
+  }
+
+  // Load whatever `stage` calls for that is missing or at the wrong size. Returns true if a load was started.
+  function requestPhotos(rec, stage, ts, tier) {
+    const ph = phState(rec), e = ph.entry;
+    if (ph.busy || ph.dead) return false;
+    const caps = photos.caps(rec.id, ts, tier);
+    const keys = PH_KEYS.filter((k) => e.maps[k] && (stage >= 2 || k === 'color') && !ph.failed.has(k) && (!ph.tex[k] || ph.caps[k] !== caps[k]));
+    if (!keys.length) return false;
+    ph.busy = true;
+    const gen = ph.gen;
+    photos.loadMaps(rec.id, keys, caps).then(({ tex, errors }) => {
+      ph.busy = false;
+      if (ph.gen !== gen || rec.ph !== ph) { for (const k in tex) freeTexture(tex[k]); return; }   // superseded: do not leak
+      for (const k in errors) {
+        console.warn('[bodies] photo map', rec.id, k, 'failed', errors[k]);
+        ph.failed.add(k);
+        if (k === 'color' && !ph.tex.color) { ph.dead = true; if (rec.kind !== 'gas' && !rec.maps) { rec.maps = {}; generateMaps(rec, ts); } }
+      }
+      const old = [];
+      for (const k in tex) {
+        if (ph.tex[k]) old.push(ph.tex[k]);
+        ph.tex[k] = tex[k]; ph.caps[k] = caps[k];
+        if (k === 'height') { tex[k].userData.hw = tex[k].image.width; tex[k].userData.hh = tex[k].image.height; }
+      }
+      if (ph.tex.color) applyPhotos(rec, ph, ts);
+      // the replaced (old-size) textures are still bound until applyPhotos' swap; free them a little later
+      if (old.length) setTimeout(() => { for (const t of old) freeTexture(t); }, 1500);
+    });
+    return true;
+  }
+  // Old behaviour for bodies without photographs: procedural maps once the body is a few pixels wide.
+  function requestMaps(rec, ts) {
+    rec.maps = {}; if (rec.kind !== 'gas') generateMaps(rec, ts);
+  }
+  app.quality?.addEventListener?.('tier', () => {
+    const tier = app.quality.tier, ts = app.quality.settings;
+    for (const r of recs) {
+      const ph = r.ph; if (!ph) continue;
+      const caps = photos.caps(r.id, ts, tier);
+      const lowered = PH_KEYS.some((k) => ph.tex[k] && caps[k] < ph.caps[k]);
+      // Hidden or tiny bodies are evicted now; visible ones keep their maps and are swapped for the new size in update().
+      if (lowered && (!r.surface.visible || r.px < COLOR_PX)) evictPhotos(r);
+      else ph.failed.clear();
+    }
+  });
+
   // Texture u offset that puts Jupiter's Great Red Spot at its System II longitude (drifts ~21 deg/yr; about
   // 45 deg II in mid 2023). System III - II = 241.65 + 0.266 d deg; body east longitude = -lambda_III.
   function grsOffset(days, grsU) {
@@ -312,7 +384,14 @@ export async function install(app) {
       if (r.gaur && !show) r.gaur.mesh.visible = false;
       if (!show) continue;
       const U = r.U;
-      if (!r.maps && px > 6 && genBudget > 0) { requestMaps(r, f.tierSettings, f.tier); genBudget--; }
+      if (photos.entry(r.id)) {
+        const ang = Math.asin(Math.min(1, r.req / Math.max(dKm, r.req)));
+        _v.set(dx, dy, dz).normalize(); _p.set(0, 0, -1).applyQuaternion(f.camQuat);
+        const off = Math.acos(Math.min(1, Math.max(-1, _v.dot(_p))));
+        const inView = dKm <= r.req * 1.5 || nearFrustum(off, ang, fov / 2, f.viewport.w / f.viewport.h);
+        const stage = photoStage(px, inView);
+        if (stage && genBudget > 0 && requestPhotos(r, stage, f.tierSettings, f.tier)) genBudget--;
+      } else if (!r.maps && px > 6 && genBudget > 0) { requestMaps(r, f.tierSettings); genBudget--; }
       if (r.uOff0 !== undefined) {
         if (r.grsU !== undefined) U.uUOff.value = grsOffset(days, r.grsU);
         else if (r.id === 'venus') { const u = r.uOff0 + 1.30 * days / (2 * Math.PI); U.uUOff.value = u - Math.floor(u); }

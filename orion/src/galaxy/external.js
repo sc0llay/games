@@ -12,6 +12,9 @@ import { VOL_GLSL, EXT_GLSL } from 'orion/galaxy/volume.js';
 
 const FAR = 2e6;            // pc; farther quads are drawn scaled down at this distance (sky camera far plane is 1e7 pc)
 const MIN_DIST_PC = 1e5;    // the Magellanic Clouds are part of the galaxy model
+const LOAD_PX = 4;           // fetch a photograph once the galaxy is at least this many pixels in radius and in view
+const MAX_LOADING = 2;       // concurrent fetch + decode jobs
+const FADE_S = 0.8;          // fade-in after upload
 const SAME_AS = { c61: 'antennae-galaxies' };   // NGC 4039 is in the Antennae photograph
 
 const VERT = /* glsl */ `
@@ -35,7 +38,7 @@ void main() {
 
 const FRAG = /* glsl */ `
 uniform sampler2D tMap;
-uniform float uHas, uSb, uGamma;
+uniform float uHas, uSb, uGamma, uFade;
 uniform vec2 uShape;   // procedural glow: axis ratio, position angle (rad)
 varying vec2 vUv;
 varying vec3 vTint;
@@ -49,7 +52,7 @@ void main() {
     float r = length(p);
     c = vec3(1.0, 0.86, 0.68) * 0.7 * exp(-pow(r / 0.12, 0.6)) * smoothstep(1.0, 0.55, r);
   }
-  gl_FragColor = vec4(c * uSb * vTint, 1.0);
+  gl_FragColor = vec4(c * uSb * uFade * vTint, 1.0);
 }`;
 
 export class ExternalGalaxies {
@@ -78,45 +81,93 @@ export class ExternalGalaxies {
       const mat = new THREE.ShaderMaterial({
         vertexShader: VERT, fragmentShader: FRAG,
         uniforms: { ...base, uC: { value: new THREE.Vector3() }, uU: { value: new THREE.Vector3() }, uV: { value: new THREE.Vector3() },
-          uGalG: { value: new THREE.Vector3(...galOf(world)) }, uR: { value: R }, tMap: { value: null }, uHas: { value: 0 },
+          uGalG: { value: new THREE.Vector3(...galOf(world)) }, uR: { value: R }, tMap: { value: null }, uHas: { value: 0 }, uFade: { value: 0 },
           uShape: { value: new THREE.Vector2(0.55 + 0.45 * rnd(), Math.PI * rnd()) } },
         transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.frustumCulled = false; mesh.renderOrder = 3;
+      mesh.frustumCulled = false; mesh.renderOrder = 3; mesh.visible = false;
       this.group.add(mesh);
       this.ids.add(d.id);
-      const it = { id: d.id, world, north, east, R, mat };
+      const it = { id: d.id, world, north, east, R, mat, mesh, half: R, photo: null, loaded: false, failed: false, fade: 0, fadeT: 0 };
       this.setHalf(it, R);
       this.items.push(it);
     }
-    this.ready = this.load(app);
+    this.app = app;
+    this.manifest = null;
+    this.loading = new Set();   // ids being fetched / decoded
+    this.pending = [];          // decoded, waiting for their one-per-frame GPU upload: { it, bmp, fill }
+    this.fwd = new THREE.Vector3();
+    this.ready = this.loadManifest(app);
   }
   setHalf(it, half) {
+    it.half = half;
     it.mat.uniforms.uU.value.set(-it.east[0] * half, -it.east[1] * half, -it.east[2] * half);   // image right = west
     it.mat.uniforms.uV.value.set(it.north[0] * half, it.north[1] * half, it.north[2] * half);
   }
-  async load(app) {
+  async loadManifest(app) {
     const man = await app.assets.json('data/galaxies/manifest.json').catch(() => null);
-    if (!man) return;
-    await Promise.all(this.items.map(async (it) => {
-      const m = man.galaxies[it.id];
-      if (!m) return;
-      const buf = await app.assets.buffer(m.file);
-      if (!buf) return;
+    this.manifest = man ? man.galaxies : {};
+    for (const it of this.items) {   // a galaxy with a photograph shows nothing until it has loaded; one without keeps its procedural glow
+      it.photo = this.manifest[it.id] || null;
+      if (!it.photo) { it.mat.uniforms.uFade.value = 1; it.fade = 1; }
+    }
+  }
+  // Fetch + decode one photograph (at most MAX_LOADING at a time); the GPU upload happens later in update().
+  async fetchPhoto(it) {
+    const m = it.photo;
+    this.loading.add(it.id);
+    try {
+      const buf = await this.app.assets.buffer(m.file);
+      if (!buf) { it.failed = true; return; }
       const bmp = await createImageBitmap(new Blob([buf]), { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-      const t = new THREE.Texture(bmp);
-      t.flipY = false; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
-      t.anisotropy = 4; t.needsUpdate = true;
-      it.mat.uniforms.tMap.value = t; it.mat.uniforms.uHas.value = 1;
-      this.setHalf(it, it.R / m.fill);   // the catalogue radius spans `fill` of the tile's half-width
-    }));
+      this.pending.push({ it, bmp, fill: m.fill });
+    } catch { it.failed = true; }
+    finally { this.loading.delete(it.id); }
+  }
+  upload({ it, bmp, fill }) {
+    const t = new THREE.Texture(bmp);
+    t.flipY = false; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    t.anisotropy = 4; t.needsUpdate = true;
+    t.onUpdate = () => { t.onUpdate = null; if (bmp.close) bmp.close(); };   // the pixels now live on the GPU
+    it.mat.uniforms.tMap.value = t; it.mat.uniforms.uHas.value = 1;
+    this.setHalf(it, it.R / fill);   // the catalogue radius spans `fill` of the tile's half-width
+    it.loaded = true; it.fadeT = this.t;
   }
   update(frame, camG, gain) {
-    const c = frame.camPos;
-    for (const it of this.items) it.mat.uniforms.uC.value.set((it.world[0] - c[0]) / PC, (it.world[1] - c[1]) / PC, (it.world[2] - c[2]) / PC);
+    const c = frame.camPos, t = frame.time;
+    this.t = t;
+    const pxPerRad = frame.viewport.h / (2 * Math.tan(frame.fovY * Math.PI / 360));
+    const aspect = frame.viewport.w / Math.max(1, frame.viewport.h);
+    const halfDiag = Math.atan(Math.tan(frame.fovY * Math.PI / 360) * Math.sqrt(1 + aspect * aspect));
+    const f = this.fwd.set(0, 0, -1).applyQuaternion(frame.camQuat);
+    const wantLoad = [];
+    for (const it of this.items) {
+      const dx = (it.world[0] - c[0]) / PC, dy = (it.world[1] - c[1]) / PC, dz = (it.world[2] - c[2]) / PC;
+      const d = Math.hypot(dx, dy, dz) || 1e-3;
+      const pxR = it.R / d * pxPerRad;
+      let vis = d >= 0.02 * it.R && pxR >= 0.5;                  // below ~1 px across nothing is drawn (the shader also fades out inside 0.02 R)
+      if (vis && d > it.half) {                                  // direction test against the view cone, with the quad's angular radius as margin
+        const cosA = (dx * f.x + dy * f.y + dz * f.z) / d;
+        const ang = Math.acos(Math.max(-1, Math.min(1, cosA)));
+        const rad = Math.max(it.half * 1.5 / d, 2 / pxPerRad);
+        vis = ang - rad < halfDiag;
+        if (vis && it.photo && !it.loaded && !it.failed && !this.loading.has(it.id) && pxR > LOAD_PX) wantLoad.push([pxR, it]);
+      } else if (vis && it.photo && !it.loaded && !it.failed && !this.loading.has(it.id)) wantLoad.push([pxR, it]);
+      if (it.photo && !it.loaded) vis = false;                   // nothing until the photograph is on the GPU
+      if (vis && it.loaded && it.fade < 1) {                     // fade-in after the upload
+        it.fade = Math.min(1, (t - it.fadeT) / FADE_S); it.mat.uniforms.uFade.value = it.fade;
+      }
+      it.mesh.visible = vis;
+      if (vis) it.mat.uniforms.uC.value.set(dx, dy, dz);
+    }
+    if (this.manifest && wantLoad.length) {                      // biggest on screen first
+      wantLoad.sort((a, b) => b[0] - a[0]);
+      for (const [, it] of wantLoad) { if (this.loading.size >= MAX_LOADING) break; this.fetchPhoto(it); }
+    }
+    if (this.pending.length) this.upload(this.pending.shift());  // one new texture per frame
     this.u.uCamG.value.set(camG[0], camG[1], camG[2]);
-    this.u.uPxPerRad.value = frame.viewport.h / (2 * Math.tan(frame.fovY * Math.PI / 360));
+    this.u.uPxPerRad.value = pxPerRad;
     this.u.uGain.value = gain; this.u.uSb.value = this.tune.sb; this.u.uGamma.value = this.tune.gamma;
   }
 }
