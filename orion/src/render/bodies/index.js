@@ -71,7 +71,11 @@ export async function install(app) {
     try { ringApi = await import('orion/render/small/ringProfile.js'); } catch { ringApi = null; }
   }
 
-  const lods = [sphereGeometry(24, 16), sphereGeometry(48, 32), sphereGeometry(96, 64), sphereGeometry(192, 128), sphereGeometry(256, 160)];
+  const lodSegs = [[24, 16], [48, 32], [96, 64], [192, 128], [256, 160]];
+  const lods = lodSegs.map(([w, h]) => sphereGeometry(w, h));
+  // Facet centres sit below the analytic ellipsoid by 1 - cos(half the facet diagonal angle). Scaling each LOD's mesh up by the
+  // inverse puts the facet centres on the ellipsoid (vertices at most ~sag above), so low-altitude cameras never go inside it.
+  const lodGrow = lodSegs.map(([w, h]) => 1 / Math.cos(0.5 * Math.hypot(2 * Math.PI / w, Math.PI / h)));
   const shellGeo = sphereGeometry(48, 32);
   const emptyRing = placeholder([0, 0, 0, 0], false);
   let tg = null;
@@ -454,7 +458,11 @@ export async function install(app) {
 
       // LOD by on-screen size
       const lod = px < 24 ? 0 : px < 90 ? 1 : px < 350 ? 2 : px < 1500 ? 3 : 4;
-      if (lod !== r.lod) { r.lod = lod; r.surface.geometry = lods[lod]; if (r.cloud) r.cloud.geometry = lods[lod]; }
+      if (lod !== r.lod) {
+        const k = lodGrow[lod] / (r.grow || 1); r.grow = lodGrow[lod];
+        r.lod = lod; r.surface.geometry = lods[lod]; r.surface.scale.multiplyScalar(k);
+        if (r.cloud) { r.cloud.geometry = lods[lod]; r.cloud.scale.multiplyScalar(k); }
+      }
       if (r.atm) atmos.update(r, f);
       if (r.gaur) r.gaur.update();
     }

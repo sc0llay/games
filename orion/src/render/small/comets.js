@@ -3,19 +3,21 @@
 // the comet's actual past orbit (particles share the nucleus' velocity at emission, so the tail curves along the orbit).
 import * as THREE from 'three';
 import { AU } from 'orion/core/units.js';
-import { makeElements, elementsToPos } from 'orion/render/small/kepler.js';
+import { makeElements, elementsToPos, elementsForApparition } from 'orion/render/small/kepler.js';
 import { rockGeometry, rockMaterial } from 'orion/render/small/rock.js';
 
 export const COMET_DEFS = [
   { id: 'halley', name: 'Halley', aliases: ['1P/Halley', "Halley's Comet", 'Comet Halley'], radius: 5.5e3, scale: 1.0, axes: [8, 4, 4], albedo: 0.04,
     el: makeElements({ a: 17.92863504856923, e: 0.9679359956953211, iDeg: 162.1905300439129, omDeg: 59.09894720612437, wDeg: 112.2414314637764, tp: 2446469.973616146677 }),
-    description: ['Short-period comet, 75–79 yr orbit, retrograde and steeply inclined.', 'Last perihelion 9 Feb 1986 at 0.59 AU; next in July 2061.', 'Nucleus about 15 × 8 × 8 km, among the darkest surfaces known.'], periodDays: 27728 },
+    description: ['Short-period comet, 75–79 yr orbit, retrograde and steeply inclined.', 'Last perihelion 9 Feb 1986 at 0.59 AU; next in July 2061.', 'Nucleus about 15 × 8 × 8 km, among the darkest surfaces known.'], periodDays: 27728,
+    perihelia: [2418781.68, 2446470.96, 2474033.5] },  // 1910-04-20, 1986-02-09, 2061-07-28 (osculating two-body drifts ~6 months by 2061)
   { id: 'hale-bopp', name: 'Hale–Bopp', aliases: ['C/1995 O1', 'Hale-Bopp', 'Comet Hale-Bopp'], radius: 3.0e4, scale: 2.6, axes: [30, 28, 26], albedo: 0.04,
     el: makeElements({ a: 177.4333839117583, e: 0.9949810027633206, iDeg: 89.28759424740302, omDeg: 282.7334213961641, wDeg: 130.4146670659176, tp: 2450537.134907143944 }),
     description: ['One of the brightest comets of the 20th century, visible to the naked eye for 18 months.', 'Perihelion 1 Apr 1997 at 0.91 AU; period about 2,400 yr, nearly polar orbit.', 'Nucleus roughly 60 km across with a huge, dusty coma.'], periodDays: 863279 },
   { id: '67p', name: '67P/Churyumov–Gerasimenko', aliases: ['67P', 'Churyumov-Gerasimenko', 'Rosetta comet', 'Chury'], radius: 1.65e3, scale: 0.35, axes: [2.6, 1.7, 1.2], albedo: 0.06, pinch: 0.28,
     el: makeElements({ a: 3.462249490129549, e: 0.6409081308996354, iDeg: 7.040294937543767, omDeg: 50.13557377155012, wDeg: 12.79824970228189, tp: 2457247.588657812098 }),
-    description: ['Jupiter-family comet, 6.4 yr orbit; target of ESA’s Rosetta and the Philae lander.', 'Bi-lobed nucleus about 4.1 × 3.3 × 1.8 km; perihelion 1.24 AU.', 'Perihelion Aug 2015, Nov 2021, Apr 2028.'], periodDays: 2353.08 },
+    description: ['Jupiter-family comet, 6.4 yr orbit; target of ESA’s Rosetta and the Philae lander.', 'Bi-lobed nucleus about 4.1 × 3.3 × 1.8 km; perihelion 1.24 AU.', 'Perihelion Aug 2015, Nov 2021, Apr 2028.'], periodDays: 2353.08,
+    perihelia: [2454890.5, 2457247.59, 2459520.8] },  // 2009-02-28, 2015-08-13, 2021-11-02
 ];
 
 const ADD = { transparent: true, depthWrite: false, depthTest: true, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -103,6 +105,9 @@ function seedGeom(n, seed) {
   return g;
 }
 
+/** Heliocentric position (metres) of a COMET_DEFS entry, anchored to the nearest known apparition. */
+export function cometPosition(def, jd, out = new Float64Array(3)) { return elementsToPos(elementsForApparition(def.el, def.perihelia, jd), jd, out); }
+
 const MU_SUN = 1.32712440018e20; // m^3/s^2
 
 export function createComets(app, orbits) {
@@ -126,7 +131,7 @@ export function createComets(app, orbits) {
     app.layers.system.add(group);
     const c = { def, group, coma, nucPt, ion, dust, rock, rockMat, pos: new Float64Array(3), tmp: new Float64Array(3) };
     comets.push(c);
-    c.positionFn = (jd, out) => elementsToPos(def.el, jd, out);
+    c.positionFn = (jd, out) => cometPosition(def, jd, out);
     if (orbits) orbits.addElementsLine(def.id, def.el);
   }
 

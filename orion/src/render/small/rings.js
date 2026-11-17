@@ -2,7 +2,7 @@
 // and a camera-centred instanced ice-chunk field near Saturn's ring plane.
 import * as THREE from 'three';
 import { AU } from 'orion/core/units.js';
-import { getRingProfile, hasRings } from 'orion/render/small/ringProfile.js';
+import { getRingProfile, hasRings, neptuneArcPhaseDeg } from 'orion/render/small/ringProfile.js';
 
 const GLSL_COMMON = /* glsl */ `
 float h11(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
@@ -222,7 +222,7 @@ export function createRings(app) {
       u.uSunL.value.copy(sun).applyQuaternion(qInv);
       cam.set(-dx / 1000, -dy / 1000, -dz / 1000).applyQuaternion(qInv); // camera in the ring frame, km (float64 until upload)
       u.uCamLocal.value.copy(cam);
-      if (e.id === 'neptune') u.uArcPhase.value = ((820.1 * (frame.jd - 2451545) * Math.PI / 180) % (Math.PI * 2));
+      if (e.id === 'neptune') u.uArcPhase.value = (neptuneArcPhaseDeg(frame.jd) % 360) * Math.PI / 180;
       u.uHole.value.set(0, 0, 0);
       if (e.chunks) e.chunks.update(frame, cam, q, sun, u, sd, e);
     }

@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { DEG } from 'orion/core/units.js';
 import { getBody } from 'orion/ephemeris/bodies.js';
+import { deltaT } from 'orion/ephemeris/deltat.js';
 
 const EPS = 23.4392911 * DEG; // mean obliquity at J2000
 const sinE = Math.sin(EPS), cosE = Math.cos(EPS);
@@ -20,7 +21,7 @@ const MODELS = {
   },
   venus: (d, T, o) => { o[0] = 272.76; o[1] = 67.16; o[2] = 160.2 - 1.4813688 * d; },
   earth: (d, T, o) => {
-    o[2] = 190.147 + 360.9856235 * d;
+    o[2] = 190.147 + 360.9856235 * (d - deltaT(2451545.0 + d) / 86400);   // d is TT days; the spin follows UT1 = TT - dT
     const Tr = d / 36525;   // unclamped: beyond +-5 centuries the pole follows the 26 kyr precession circle at fixed obliquity
     if (Math.abs(Tr) <= 5) { o[0] = -0.641 * Tr; o[1] = 90 - 0.557 * Tr; return; }
     const l = (90 - 1.3969713 * Tr) * DEG, cb = sinE, sb = cosE;   // pole at ecliptic latitude 90 - obliquity

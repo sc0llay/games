@@ -1,3 +1,4 @@
+import { poleW } from 'orion/ephemeris/rotation.js';
 // Planetary ring radial profiles (pure data; textures are created lazily so jsc tests can import this).
 //
 //   getRingProfile(id) → { texture, tauTexture, innerKm, outerKm, ... } | null     (saturn, jupiter, uranus, neptune)
@@ -227,3 +228,11 @@ export function getRingProfile(id) {
   return profile;
 }
 export const hasRings = (id) => id in DEFS;
+
+// Adams-ring arcs (Neptune) revolve at their pattern speed (inertial, deg/day). The ring mesh is already in Neptune's rotating
+// body frame, so the shader phase is the pattern speed minus the planet's spin since J2000.
+export const ARC_PATTERN_DEG_PER_DAY = 820.1194;
+export function neptuneArcPhaseDeg(jd) {
+  const a = [0, 0, 0], b = [0, 0, 0]; poleW('neptune', jd, a); poleW('neptune', 2451545.0, b);
+  return ARC_PATTERN_DEG_PER_DAY * (jd - 2451545.0) - (a[2] - b[2]);
+}

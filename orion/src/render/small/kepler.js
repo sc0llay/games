@@ -20,7 +20,7 @@ export function solveKepler(M, e) {
 
 /** el = { a (AU), e, i, om (Ω), w (ω), M0 (rad), epoch (JD) }; returns heliocentric ecliptic J2000 metres. */
 export function elementsToPos(el, jd, out = new Float64Array(3)) {
-  const n = GAUSS_K / (el.a * Math.sqrt(el.a));
+  const n = el.n ?? GAUSS_K / (el.a * Math.sqrt(el.a)); // el.n (rad/day) overrides two-body mean motion, e.g. per-apparition fits
   const E = solveKepler(el.M0 + n * (jd - el.epoch), el.e);
   const xv = el.a * (Math.cos(E) - el.e), yv = el.a * Math.sqrt(1 - el.e * el.e) * Math.sin(E);
   return rotate(el, xv, yv, out);
@@ -49,4 +49,18 @@ export function orbitPoints(el, n = 512, maxAU = 600) {
     rotate(el, xv * s, yv * s, out.subarray(k * 3, k * 3 + 3));
   }
   return out;
+}
+
+/**
+ * Re-epoch comet elements to the apparition bracketing jd. `perihelia` is an ascending list of actual perihelion JDs; between two of
+ * them the mean anomaly runs 0 -> 2pi over the true interval (planetary perturbations of the period are thereby absorbed), outside
+ * the list the two-body period is used from the nearest end. Shape elements are unchanged.
+ */
+export function elementsForApparition(el, perihelia, jd) {
+  if (!perihelia || perihelia.length < 1) return el;
+  const P0 = 2 * Math.PI / (GAUSS_K / (el.a * Math.sqrt(el.a)));
+  let i = 0; while (i < perihelia.length - 1 && jd >= perihelia[i + 1]) i++;
+  if (jd < perihelia[0]) return { ...el, epoch: perihelia[0], M0: 0, n: 2 * Math.PI / P0 };
+  const P = i < perihelia.length - 1 ? perihelia[i + 1] - perihelia[i] : P0;
+  return { ...el, epoch: perihelia[i], M0: 0, n: 2 * Math.PI / P };
 }

@@ -16,14 +16,14 @@ const PT_VERT = /* glsl */ `
 #include <common>
 #include <logdepthbuf_pars_vertex>
 attribute vec4 aEl1;  // a (AU), e, i, Ω
-attribute vec4 aEl2;  // ω, M0, H, unused
+attribute vec4 aEl2;  // ω, M0, H, mean motion override (rad/day; 0 = Keplerian from a, used to lock Trojans to Jupiter)
 uniform vec3 uCam;    // camera heliocentric position, AU
 uniform float uDtHi, uDtLo, uPx, uSize;
 varying float vB;
 const float TAU = 6.28318530718;
 void main() {
   float a = aEl1.x, e = aEl1.y, inc = aEl1.z, om = aEl1.w, w = aEl2.x, M0 = aEl2.y, H = aEl2.z;
-  float n = 0.01720209895 / (a * sqrt(a));                 // rad/day
+  float n = aEl2.w > 0.0 ? aEl2.w : 0.01720209895 / (a * sqrt(a));                 // rad/day
   float M = M0 + mod(n * uDtHi, TAU) + n * uDtLo;          // time = hi + lo days since the data epoch (keeps float32 precision)
   M = mod(M, TAU);
   float E = M + e * sin(M);
@@ -73,6 +73,8 @@ export function genBelt(count, seed = 7) {
   rows.sort((x, y) => x[6] - y[6]);
   return Float32Array.from(rows.flat());
 }
+/** Trojans share Jupiter's mean motion (rad/day) so L4/L5 stay put; fed to the shader through aEl2.w. */
+export const trojanMeanMotion = (periodDays) => 2 * Math.PI / periodDays;
 /** Jupiter Trojans around L4/L5: same period as Jupiter, mean longitude ±60° with libration. */
 export function genTrojans(count, aJ, lambdaJ, seed = 11) {
   const r = rng(seed), rows = [];
@@ -101,13 +103,13 @@ export function genKuiper(count, seed = 23) {
   return Float32Array.from(rows.flat());
 }
 
-function pointsFrom(data, count, epoch, color, size) {
+function pointsFrom(data, count, epoch, color, size, nLock = 0) {
   // data: Float32Array rows of 7 [a,e,i,Ω,ω,M0,H]
   const geom = new THREE.BufferGeometry();
   const el1 = new Float32Array(count * 4), el2 = new Float32Array(count * 4);
   for (let k = 0; k < count; k++) {
     el1[k * 4] = data[k * 7]; el1[k * 4 + 1] = data[k * 7 + 1]; el1[k * 4 + 2] = data[k * 7 + 2]; el1[k * 4 + 3] = data[k * 7 + 3];
-    el2[k * 4] = data[k * 7 + 4]; el2[k * 4 + 1] = data[k * 7 + 5]; el2[k * 4 + 2] = data[k * 7 + 6];
+    el2[k * 4] = data[k * 7 + 4]; el2[k * 4 + 1] = data[k * 7 + 5]; el2[k * 4 + 2] = data[k * 7 + 6]; el2[k * 4 + 3] = nLock;
   }
   geom.setAttribute('aEl1', new THREE.BufferAttribute(el1, 4)); geom.setAttribute('aEl2', new THREE.BufferAttribute(el2, 4));
   geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3)); // dummy, required for draw count
@@ -177,7 +179,7 @@ export async function createBelts(app) {
   const jup = eph.getBody?.('jupiter'); const pJ = jup?.periodDays ?? jup?.period ?? 4332.59;
   const aJ = Math.pow(pJ / 365.25636, 2 / 3);
   const jp = new Float64Array(3); eph.heliocentric('jupiter', epoch, jp);
-  if (nTroj < 300) sets.push({ name: 'trojans', ...pointsFrom(genTrojans(4500, aJ, Math.atan2(jp[1], jp[0])), 4500, epoch, [0.95, 0.72, 0.55].map((x) => x * BELT_GAIN * 0.9), 1.9), tiered: false, scale: 0.4 });
+  if (nTroj < 300) sets.push({ name: 'trojans', ...pointsFrom(genTrojans(4500, aJ, Math.atan2(jp[1], jp[0])), 4500, epoch, [0.95, 0.72, 0.55].map((x) => x * BELT_GAIN * 0.9), 1.9, trojanMeanMotion(pJ)), tiered: false, scale: 0.4 });
   sets.push({ name: 'kuiper', ...pointsFrom(genKuiper(9000), 9000, 2451545.0, [0.7, 0.8, 1.0].map((x) => x * KUIPER_GAIN), 1.9), tiered: false, scale: 0.3 });
   for (const s of sets) app.layers.system.add(s.points);
   out.sets = sets;

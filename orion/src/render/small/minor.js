@@ -33,7 +33,6 @@ export function createMinor(app) {
   const haveMars = (id) => { try { return !!eph.getBody?.(id); } catch { return false; } };
   for (const m of MARS_MOONS) if (haveMars(m.id)) items.push({ ...mk(m), kind: 'moon' });
 
-  const marsP = new Float64Array(3), mq = new THREE.Matrix4(), bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
   function update(frame) {
     const cam = frame.camPos;
     for (const it of items) {
@@ -49,11 +48,8 @@ export function createMinor(app) {
       it.mat.uniforms.uSunDir.value.set(-it.pos[0], -it.pos[1], -it.pos[2]).normalize();
       it.mat.uniforms.uSunE.value = (AU / Math.max(rM, 1e9)) ** 2;
       if (it.kind === 'moon') {
-        // Tidally locked: long axis toward Mars, z along the (approximate) orbit normal = ecliptic north.
-        eph.heliocentric(it.parent, frame.jd, marsP);
-        bx.set(marsP[0] - it.pos[0], marsP[1] - it.pos[1], marsP[2] - it.pos[2]).normalize();
-        bz.set(0, 0, 1); by.crossVectors(bz, bx).normalize(); bz.crossVectors(bx, by);
-        mq.makeBasis(bx, by, bz); it.mesh.quaternion.setFromRotationMatrix(mq);
+        // Tidally locked: bodyQuaternion gives +x toward Mars and +z along the orbit normal.
+        eph.bodyQuaternion(it.id, frame.jd, it.mesh.quaternion);
       } else {
         it.mesh.rotation.set(0.5, 0.3, ((frame.jd * 24) / it.spinH) * Math.PI * 2);
       }
