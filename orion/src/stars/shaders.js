@@ -34,7 +34,7 @@ void main() {
   const float THR = 0.0015;
   float rc = sigC * sqrt(2.0 * max(log(max(peakC * uGain, 1e-12) / THR), 0.0));
   float rh = sigH * sqrt(2.0 * max(log(max(peakH * uGain, 1e-12) / THR), 0.0));
-  float half_ = clamp(max(rc, rh) + 1.0, 1.0, 96.0);            // sprite is never smaller than 2 px
+  float half_ = clamp(max(rc, rh) + 1.0, 1.0, MAX_HALF);            // sprite is never smaller than 2 px
 
   if (vis < 1e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
   gl_Position = projectionMatrix * mv;
@@ -54,6 +54,7 @@ void main() {
   vec2 p = (gl_PointCoord - 0.5) * (2.0 * vHalf);
   float r2 = dot(p, p);
   float I = vPeakC * exp(-0.5 * r2 / (vSigC * vSigC)) + vPeakH * exp(-0.5 * r2 / (vSigH * vSigH));
+  if (r2 >= vHalf * vHalf) discard;
   I *= 1.0 - smoothstep(0.75, 1.0, sqrt(r2) / vHalf);
   gl_FragColor = vec4(vColor * I, 1.0);
 }`;
@@ -82,3 +83,14 @@ void main() {
   float edge = 1.0 - smoothstep(1.0 - uEdge, 1.0, r);
   gl_FragColor = vec4(uColor * limb * uBright * uAlpha * edge, 1.0);
 }`;
+
+// Largest point-sprite half-size (px) the GPU can draw, capped at 96. Queried once.
+let maxHalf = 0;
+export function maxPointHalf(renderer) {
+  if (!maxHalf) {
+    let m = 192;
+    try { const r = renderer.getContext().getParameter(0x846D); if (r && r[1] >= 2) m = r[1]; } catch (e) { /* keep default */ }   // ALIASED_POINT_SIZE_RANGE
+    maxHalf = Math.max(1, Math.min(96, Math.floor(m / 2)));
+  }
+  return maxHalf;
+}

@@ -33,13 +33,16 @@ void main() {
   vec3 c = texture(tCube, d).rgb;
   float ab = abs(d.z), band = 1.0 - smoothstep(0.0, 0.24, ab), sat = 1.0 - smoothstep(0.08, 0.5, ab);
   // anisotropic: clouds are stretched along the plane (compress z before sampling)
-  vec3 q = vec3(d.xy, d.z * 1.8);
-  float n1 = fbm3(q * 28.0), n2 = fbm3(q * 90.0 + 11.0);
+  float g = 1.0;
+  if (band > 0.0) {
+    vec3 q = vec3(d.xy, d.z * 1.8);
+    float n1 = fbm3(q * 28.0), n2 = fbm3(q * 90.0 + 11.0);
   // contrast ~2x the first pass: the real Scutum/Sagittarius star clouds run ~3-5x between cloud and rift at this scale
   // (Great Rift windows vs. the cloud cores); the old 0.55..1.45 swing read as half that. Mean stays ~1 so the integrated
   // band brightness the volume gives is unchanged, and the narrower n2 keeps fine grain from washing the clouds out.
-  float cl = smoothstep(0.25, 0.8, n1);
-  float g = (0.3 + 1.45 * cl) * (0.78 + 0.44 * n2) * 0.93;
+    float cl = smoothstep(0.25, 0.8, n1);
+    g = (0.3 + 1.45 * cl) * (0.78 + 0.44 * n2) * 0.93;
+  }
   // the faint diffuse floor toward the poles/corners: suppress its reddish tint
   float L = dot(c, vec3(0.3, 0.5, 0.2));
   c = mix(vec3(L) * vec3(0.98, 0.98, 1.04), c, 0.3 + 0.7 * sat);
@@ -51,7 +54,7 @@ const BLIT_FRAG = /* glsl */ `uniform sampler2D tSrc; varying vec2 vUv; void mai
 export class SkyCube {
   constructor(app, vol, objs, face) {
     this.app = app; this.vol = vol; this.F = face;
-    this.rt = new THREE.WebGLCubeRenderTarget(face, { depthBuffer: false, type: THREE.HalfFloatType, format: THREE.RGBAFormat, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.rt = this.makeRT(face); this.back = null;
     this.tmp = new THREE.WebGLRenderTarget(face, face, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.layer = objs.layer('cube', face);
     this.layer.setCubeProjection(face);
@@ -81,6 +84,9 @@ export class SkyCube {
     this.blitScene = vol.quadScene;
   }
 
+  makeRT(face) {
+    return new THREE.WebGLCubeRenderTarget(face, { depthBuffer: false, type: THREE.HalfFloatType, format: THREE.RGBAFormat, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  }
   // True when a (re)capture should start for this camera position.
   needsCapture(camG, distArm) {
     if (!this.ready) return true;
@@ -89,7 +95,9 @@ export class SkyCube {
   }
   start(frame, camG, gain = 1) {
     this.gain = gain;
-    this.cap = { g: [camG[0], camG[1], camG[2]], face: 0, tile: 0, phase: 0 };
+    // a displayed cube is recaptured into a back cube and swapped when complete (no old/new face seams on screen)
+    if (this.ready && !this.back) this.back = this.makeRT(this.F);
+    this.cap = { g: [camG[0], camG[1], camG[2]], face: 0, tile: 0, phase: 0, rt: this.ready ? this.back : this.rt };
     const m = frame.galaxyMatrix.elements; // R^T rows = R columns
     const r = this.rotRT;
     r[0] = m[0]; r[1] = m[1]; r[2] = m[2]; r[3] = m[4]; r[4] = m[5]; r[5] = m[6]; r[6] = m[8]; r[7] = m[9]; r[8] = m[10];
@@ -130,7 +138,7 @@ export class SkyCube {
         renderer.setRenderTarget(this.tmp);
         renderer.render(this.scene, this.cam);
         this.vol.quad.material = this.blit;
-        renderer.setRenderTarget(this.rt, cap.face);
+        renderer.setRenderTarget(cap.rt, cap.face);
         renderer.render(this.vol.quadScene, this.vol.quadCam);
         cap.face++; cap.tile = 0; cap.phase = 0;
         budget = 0; // object pass is the heavy one: end the slice
@@ -139,6 +147,10 @@ export class SkyCube {
     renderer.setRenderTarget(prevRT);
     if (cap.face >= 6) {
       this.capG.set(cap.g); this.cap = null;
+      if (cap.rt !== this.rt) {
+        const old = this.rt; this.rt = cap.rt; this.back = null; old.dispose();
+        this.bg.material.uniforms.tCube.value = this.rt.texture;
+      }
       if (!this.ready) { this.ready = true; this.readyAt = frame.time; }
     }
   }
@@ -153,6 +165,6 @@ export class SkyCube {
   }
   dispose() {
     this.app.layers.sky.remove(this.bg);
-    this.layer.dispose(); this.rt.dispose(); this.tmp.dispose(); this.march.dispose(); this.blit.dispose(); this.bg.material.dispose(); this.bg.geometry.dispose();
+    this.layer.dispose(); this.rt.dispose(); if (this.back) this.back.dispose(); this.tmp.dispose(); this.march.dispose(); this.blit.dispose(); this.bg.material.dispose(); this.bg.geometry.dispose();
   }
 }

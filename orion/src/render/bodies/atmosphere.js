@@ -86,7 +86,7 @@ export function atmosphereUniforms(p) {
     uBO: { value: km(p.bO || [0, 0, 0]) }, uBD: { value: km(p.bD || [0, 0, 0]) },
     uProf: { value: new THREE.Vector4(p.HR, p.HM, p.oz ? p.oz[0] : 0, p.oz ? p.oz[1] : 0) },
     uDet: { value: new THREE.Vector4(p.detach ? p.detach[0] : 0, p.detach ? p.detach[1] : 0, 0, 0) },
-    uGM: { value: v(p.g) }, uAlb: { value: v(p.albedo) }, uSteps: { value: 32 },
+    uGM: { value: v(p.g) }, uAlb: { value: v(p.albedo) }, uSteps: { value: 32 }, uStepMin: { value: 16 }, uHs: { value: Math.max(p.HR, p.HM, p.detach ? p.detach[1] * 2 : 0, 1) },
   };
 }
 
@@ -238,6 +238,7 @@ uniform vec3 uScale, uSunObj, uCamObj;
 uniform float uSunDist, uSunR, uIrr, uFade;
 uniform vec4 uOcc[4];
 uniform int uSteps;
+uniform float uStepMin, uHs;
 uniform sampler2D tAtmMS;
 varying vec3 vWorld;
 
@@ -330,9 +331,11 @@ void main() {
   vec3 phM = atmPhaseM(mu);
   bool ecl = uOcc[0].w > 0.0;
   vec3 acc = vec3(0.0), thr = vec3(1.0);
-  float N = float(uSteps), fp = 0.0;
+  // Step count follows the path length in scale heights (about 2 samples per scale height, between the tier's min and
+  // max): thin shells on huge radii (gas giants) seen face-on need far fewer than limb or grazing rays.
+  float N = floor(clamp(2.0 * L / uHs, uStepMin, float(uSteps))), fp = 0.0;
   for (int i = 0; i < 64; i++) {
-    if (i >= uSteps) break;
+    if (float(i) >= N) break;
     float f1 = atmWarp(float(i + 1) / N, a);
     float fs = atmWarp((float(i) + 0.5 + (jit - 0.5) * 0.6) / N, a);
     float dt = (f1 - fp) * L; fp = f1;
@@ -429,7 +432,7 @@ export class AtmosphereSystem {
     const t = ATMOS_TIERS[f.tier] || ATMOS_TIERS.high;
     if (e.dirty) this.#bake(e, f.tier);
     const U = e.U;
-    U.uSteps.value = t.steps;
+    U.uSteps.value = t.steps; U.uStepMin.value = Math.max(8, t.steps >> 1);
     U.uAtmR.value.z = U.uSunR.value / U.uSunDist.value + 0.002;
     const c = U.uCamObj.value, k = rec.req / rec.rpol;
     const camR = Math.hypot(c.x, c.y, c.z * k);

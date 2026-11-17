@@ -2,7 +2,11 @@ import { el, icon, iconButton } from 'orion/ui/dom.js';
 
 const KEY = 'orion.ui';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
-const save = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch {} };
+// Debounced: sliders emit on every input event. The latest snapshot is flushed after 300 ms and when the page is hidden.
+let pending = null, saveT = 0;
+const flush = () => { clearTimeout(saveT); saveT = 0; if (!pending) return; const o = pending; pending = null; try { localStorage.setItem(KEY, JSON.stringify(o)); } catch {} };
+const save = (o) => { pending = o; if (!saveT) saveT = setTimeout(flush, 300); };
+if (typeof addEventListener === 'function') { addEventListener('pagehide', flush); addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); }); }
 
 export function seg(name, options, get, set) {
   const wrap = el('div', { class: 'os-seg', role: 'radiogroup', 'aria-label': name });

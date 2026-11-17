@@ -169,9 +169,22 @@ export async function install(app) {
     const w = Math.min(big ? 2048 : 1024, ts.maxTexture || 1024), h = w / 2;
     const c = rec.colour;
     const spec = { colA: c.map((x) => x * 0.8), colB: c.map((x) => Math.min(1, x * 1.5)), crater: 0.4, patch: 0.5, seed: rec.id.length * 3.7 };
-    rec.maps = tg.generate(style, w, h, spec);
-    rec.U.tColor.value = rec.maps.color.texture; rec.U.tData.value = rec.maps.data.texture;
-    rec.U.uTexel.value.set(1 / w, 1 / h);
+    // Baked in horizontal bands over several frames (tg.pump from update); bound once complete, unless the photo maps
+    // got there first, in which case the procedural targets are never used and are freed at once.
+    rec.maps = tg.generate(style, w, h, spec, 4, (maps) => {
+      if (rec.maps !== maps) { disposeMaps(maps); return; }
+      if (rec.proceduralDone) { disposeMaps(maps); rec.maps = {}; return; }
+      rec.U.tColor.value = maps.color.texture; rec.U.tData.value = maps.data.texture;
+      rec.U.uTexel.value.set(1 / w, 1 / h);
+    });
+  }
+  const disposeMaps = (m) => { m?.color?.dispose?.(); m?.data?.dispose?.(); };
+  // Once photographic colour (and clouds, where the body has a shell) are bound nothing samples the procedural bake.
+  function dropProcedural(rec, ph) {
+    if (!rec.maps || !rec.maps.color || rec.proceduralDone) return;
+    if (!ph.photo || (rec.cloud && !ph.cloudPhoto)) return;
+    rec.proceduralDone = true;
+    if (rec.maps.ready) { disposeMaps(rec.maps); rec.U.tData.value = placeholder([127, 128, 0, 0], false); rec.maps = {}; }
   }
 
   // ---- photographic maps ------------------------------------------------------------------------------------------
@@ -217,6 +230,7 @@ export async function install(app) {
       rec.grsU = e.grsU;
       if (mat) { rec.surface.material.dispose(); rec.surface.material = mat; ph.photo = photo; }
       if (cmat) { rec.cloud.material.dispose(); rec.cloud.material = cmat; ph.cloudPhoto = true; }
+      dropProcedural(rec, ph);
     });
   }
 
@@ -227,6 +241,7 @@ export async function install(app) {
     for (const k of PH_KEYS) freeTexture(ph.tex[k]);
     const U = rec.U;
     U.tColor.value = placeholder([0, 0, 0, 0], true); U.tNight.value = U.tClouds.value = U.tSpec.value = U.tHeight.value = blank; U.tNormal.value = flatNormal;
+    rec.proceduralDone = false;
     if (ph.photo) { rec.surface.material.dispose(); rec.surface.material = createSurfaceMaterial(rec.kind, U, rec.atmoTint); }
     if (ph.cloudPhoto) { rec.cloud.material.dispose(); rec.cloud.material = createCloudMaterial(U); }
     rec.ph = null; rec.uOff0 = undefined;
@@ -302,6 +317,7 @@ export async function install(app) {
   const earthR = (recs.find((x) => x.id === 'earth') || { occR: -1 }).occR;
 
   function update(f) {
+    tg?.pump(1);
     const jd = f.jd, days = jd - J2000, cam = f.camPos;
     const lvl = Math.min(1, Math.max(0, f.levels[3] + f.levels[4]));
     const hPx = f.viewport.h, fov = f.fovY * Math.PI / 180; // core stores degrees
@@ -384,14 +400,23 @@ export async function install(app) {
       if (r.gaur && !show) r.gaur.mesh.visible = false;
       if (!show) continue;
       const U = r.U;
+      // Angular frustum test (against the half-diagonal, 25% margin): bodies outside it keep streaming their maps ready
+      // but skip the LUT bake, occluder pick and every draw this frame.
+      const ang = Math.asin(Math.min(1, r.req / Math.max(dKm, r.req)));
+      _v.set(dx, dy, dz).normalize(); _p.set(0, 0, -1).applyQuaternion(f.camQuat);
+      const off = Math.acos(Math.min(1, Math.max(-1, _v.dot(_p))));
+      const inView = dKm <= r.req * 1.5 || nearFrustum(off, ang, fov / 2, f.viewport.w / f.viewport.h);
       if (photos.entry(r.id)) {
-        const ang = Math.asin(Math.min(1, r.req / Math.max(dKm, r.req)));
-        _v.set(dx, dy, dz).normalize(); _p.set(0, 0, -1).applyQuaternion(f.camQuat);
-        const off = Math.acos(Math.min(1, Math.max(-1, _v.dot(_p))));
-        const inView = dKm <= r.req * 1.5 || nearFrustum(off, ang, fov / 2, f.viewport.w / f.viewport.h);
         const stage = photoStage(px, inView);
         if (stage && genBudget > 0 && requestPhotos(r, stage, f.tierSettings, f.tier)) genBudget--;
-      } else if (!r.maps && px > 6 && genBudget > 0) { requestMaps(r, f.tierSettings); genBudget--; }
+      } else if (!r.maps && px > 6 && inView && genBudget > 0) { requestMaps(r, f.tierSettings); genBudget--; }
+      if (!inView) {
+        r.surface.visible = false;
+        if (r.cloud) r.cloud.visible = false;
+        if (r.atm) r.atm.visible = false;
+        if (r.gaur) r.gaur.mesh.visible = false;
+        continue;
+      }
       if (r.uOff0 !== undefined) {
         if (r.grsU !== undefined) U.uUOff.value = grsOffset(days, r.grsU);
         else if (r.id === 'venus') { const u = r.uOff0 + 1.30 * days / (2 * Math.PI); U.uUOff.value = u - Math.floor(u); }

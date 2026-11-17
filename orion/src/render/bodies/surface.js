@@ -132,15 +132,22 @@ const CLOUDS = /* glsl */ `
 // Photographic cloud map (Earth): drifts east of the ground (1.5 deg/h of sim time) with a bounded, latitude-dependent
 // shear (a 12-day oscillation, so spiral smearing never accumulates at high time rates), sharpened, fbm break-up up close.
 // u grows eastward and the lookup is at uv + off, so an eastward drift is a falling offset.
-float cloudDensity(vec3 dir) {
+float cloudBase(vec3 dir) {
   float lat = asin(clamp(dir.z, -1.0, 1.0));
   float drift = uAnim.x * 0.1 + 0.04 * sin(uAnim.x * 0.5236 + 2.0 * lat) * cos(3.0 * lat);
   float c = sphTex(tClouds, dir, uUOff - drift).r;
-  float dens = smoothstep(0.22, 0.92, c);
+  return smoothstep(0.22, 0.92, c);
+}
+// Cloud-shadow tap: the soft shadow needs no fbm break-up.
+float cloudDensityCoarse(vec3 dir) { return cloudBase(dir); }
+float cloudDensity(vec3 dir) {
+  float dens = cloudBase(dir);
   if (uDetail > 0.001) dens = clamp(dens * (1.0 + (fbm(dir * 900.0, 3) - 0.5) * 1.1 * uDetail), 0.0, 1.0);
   return dens;
 }
 #else
+float cloudDensity(vec3 dir);
+float cloudDensityCoarse(vec3 dir) { return cloudDensity(dir); }
 float cloudDensity(vec3 dir) {
   float c = cos(uDrift), s = sin(uDrift);
   vec3 d = vec3(c * dir.x - s * dir.y, s * dir.x + c * dir.y, dir.z);
@@ -235,7 +242,7 @@ void main() {
     float cd = cloudDensity(dir);
     // cloud shadow: sample the cloud layer where the sun ray crosses it
     vec3 cdir = normalize(nE * uScale.x + L * (9.5 / max(NLg, 0.12)));
-    float cs = cloudDensity(cdir);
+    float cs = cloudDensityCoarse(cdir);
     float shadow = 1.0 - 0.6 * cs * smoothstep(0.0, 0.1, NLg);
     col = sun * alb * NL * soft * shadow;
     // GGX sun glint: roughness 0.06 on water, 0.8 on land (scaled by pi: 1.0 = white Lambertian)

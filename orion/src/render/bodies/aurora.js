@@ -238,17 +238,23 @@ export function createAurora(app, U, geo, rec) {
   });
   const mapScene = new THREE.Scene(), mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mapMat); quad.frustumCulled = false; mapScene.add(quad);
-  let mapRT = null;
+  let mapRT = null, mapT = -1e9;
+  const MAP_HZ = 16;
   const renderMap = (w, h) => {
     const r = app.renderer;
+    let fresh = false;
     if (!mapRT || mapRT.width !== w || mapRT.height !== h) {
-      mapRT?.dispose();
+      mapRT?.dispose(); fresh = true;
       mapRT = new THREE.WebGLRenderTarget(w, h, {
         type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false,
         minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping,
       });
       A.tAurMap.value = mapRT.texture;
     }
+    // The curtains evolve slowly: rebake at ~16 Hz (always on resize / first use), not every frame.
+    const now = performance.now();
+    if (!fresh && now - mapT < 1000 / MAP_HZ) return;
+    mapT = now;
     const prev = r.getRenderTarget();
     r.setRenderTarget(mapRT); r.render(mapScene, mapCam); r.setRenderTarget(prev);
   };

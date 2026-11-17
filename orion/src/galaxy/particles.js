@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MCS, DUST_RGB } from 'orion/galaxy/model.js';
 import { VOL_GLSL, EXT_GLSL } from 'orion/galaxy/volume.js';
+import { maxPointHalf } from 'orion/stars/shaders.js';
 
 // Everything in the sky layer that is not the smooth volume: procedural star "groups" (point sprites with an
 // energy-conserving PSF and per-star dust extinction), HII-region / nuclear-cluster / Magellanic-Cloud billboards,
@@ -57,6 +58,7 @@ void main() {
   vec2 p = (gl_PointCoord - 0.5) * (2.0 * vHalf);
   float r2 = dot(p, p);
   float I = vPeakC * exp(-0.5 * r2 / (vSigC * vSigC)) + vPeakH * exp(-0.5 * r2 / (vSigH * vSigH));
+  if (r2 >= vHalf * vHalf) discard;
   I *= 1.0 - smoothstep(0.75, 1.0, sqrt(r2) / vHalf);
   gl_FragColor = vec4(vColor * I, 1.0);
 }`;
@@ -86,14 +88,20 @@ void main() {
   if (type < 0.5) {
     vis *= smoothstep(0.4 * size, 2.5 * size, d);
     vis *= 1.0 - uHole * (1.0 - smoothstep(500.0, 1100.0, length(aData.xyz - uSunG)));
-    vTrans = exp(-segTau(uCamG, aData.xyz) * uDust);
   } else if (type < 1.5) {
-    vTrans = exp(-segTau(uCamG, aData.xyz) * uDust);
     vis *= smoothstep(0.3, 2.0, d);
   } else if (type < 2.5) {
     vis *= smoothstep(0.3 * size, 2.0 * size, d);
   }
+  // cheap rejections (hidden, behind, or quad entirely outside the viewport) before the dust integral
+  if (vis >= 1e-3 && type < 2.5) {
+    vec4 cc = projectionMatrix * mv;
+    vec2 ext = size * scale * 1.5 * 1.5 / max(-mv.z, 1e-9) * vec2(projectionMatrix[0][0], projectionMatrix[1][1]);
+    vec2 nd = abs(cc.xy / max(cc.w, 1e-9));
+    if (nd.x > 1.0 + ext.x || nd.y > 1.0 + ext.y) vis = 0.0;
+  }
   if (vis < 1e-3) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  if (type < 1.5) vTrans = exp(-segTau(uCamG, aData.xyz) * uDust);
   vP = position.xy * 1.5;
   vInt = inten * vis * uGainOut; vType = type; vSeed = aMisc.y; vBright = aMisc.x;
   if (type > 2.5) {
@@ -161,7 +169,7 @@ void main() {
   float peak = E / (6.2831853 * sig * sig);
   vis *= smoothstep(0.5 * uLimit, 1.6 * uLimit, peak);
   if (vis < 1e-3) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
-  float half_ = clamp(sig * 3.2 + 1.0, 2.0, 96.0);
+  float half_ = clamp(sig * 3.2 + 1.0, 2.0, MAX_HALF);
   sig = min(sig, half_ / 3.0);
   gl_Position = projectionMatrix * mv;
   gl_PointSize = 2.0 * half_;
@@ -198,6 +206,7 @@ export class Layer {
       uNear0: S.uNear0, uNear1: S.uNear1, ...this.u,
     };
     const mk = (vertexShader, fragmentShader, extra = {}) => new THREE.ShaderMaterial({
+      defines: { MAX_HALF: maxPointHalf(owner.app.renderer).toFixed(1) },
       vertexShader, fragmentShader, uniforms: { ...common, ...extra }, transparent: true, blending: THREE.AdditiveBlending,
       depthTest: false, depthWrite: false, toneMapped: false,
     });
@@ -278,7 +287,7 @@ export class GalaxyObjects {
     const S = vol.shared;
     this.shared = {
       tVol: S.tVol, tPlane: S.tPlane, tPlaneIn: S.tPlaneIn, uPin: S.uPin, uCloudP: S.uCloudP, uCloudA: S.uCloudA, uCloudOn: S.uCloudOn, uFrac: S.uFrac,
-      uKv: S.uKv, uSunG: S.uSunG, uHole: S.uHole, uDust: { value: new THREE.Vector3(...DUST_RGB) }, uMaxHalf: { value: 96 },
+      uKv: S.uKv, uSunG: S.uSunG, uHole: S.uHole, uDust: { value: new THREE.Vector3(...DUST_RGB) }, uMaxHalf: { value: maxPointHalf(app.renderer) },
       uSigma0: { value: 0.75 }, uLimit: { value: 1.2e-3 }, uNear0: { value: 5 }, uNear1: { value: 50 },
       uHii: { value: 0.18 }, uNsc: { value: 6.0 }, uMc: { value: 0.05 },
     };

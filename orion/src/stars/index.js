@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PC, AU, LY, R_SUN, DEG, smoothstep, clamp } from 'orion/core/units.js';
 import { decodeHyg, describeStar } from 'orion/stars/decode.js';
 import { buildColourLUT, bvToTeff, bvToRGB, starRadiusSolar } from 'orion/stars/color.js';
-import { STAR_VERT, STAR_FRAG, DISC_VERT, DISC_FRAG } from 'orion/stars/shaders.js';
+import { STAR_VERT, STAR_FRAG, DISC_VERT, DISC_FRAG, maxPointHalf } from 'orion/stars/shaders.js';
 
 // Catalogue stars (spec §08): HYG v4.1 within 500 pc as GPU points with true positions, B–V colours, apparent
 // magnitude from the real camera distance, energy-conserving PSF; named-star and constellation registry entries;
@@ -54,7 +54,7 @@ export async function install(app) {
     uShellFade: { value: 1 }, uNearIdx: { value: -1 }, uNearFade: { value: 0 }, uLimit: { value: 1.2e-3 },
   };
   const mat = new THREE.ShaderMaterial({
-    uniforms, vertexShader: STAR_VERT, fragmentShader: STAR_FRAG,
+    uniforms, defines: { MAX_HALF: maxPointHalf(app.renderer).toFixed(1) }, vertexShader: STAR_VERT, fragmentShader: STAR_FRAG,
     transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
   });
   const points = new THREE.Points(geo, mat);

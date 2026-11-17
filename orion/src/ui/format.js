@@ -62,3 +62,20 @@ export function fmtDay(h) {
   const a = Math.abs(h), s = a >= 48 ? `${(a / 24).toFixed(2)} days` : `${a.toFixed(2)} h`;
   return h < 0 ? `${s} (retrograde)` : s;
 }
+
+// formatDistance with cached Intl.NumberFormat instances (core's version builds one per call; this is hit ~200×/2 s).
+const NF = [];
+const num = (v, digits) => {
+  const a = Math.abs(v);
+  if (a >= 1e5 || (a > 0 && a < 1e-2)) return v.toExponential(2).replace('e+', '×10^').replace('e-', '×10^-');
+  return (NF[digits] ||= new Intl.NumberFormat('en-GB', { maximumSignificantDigits: digits })).format(v);
+};
+export function formatDistance(m, digits = 3) {
+  const a = Math.abs(m);
+  if (a < 1e6) return `${num(m / 1e3, digits)} km`;
+  if (a < 1e9) return `${num(m / 1e6, digits)} Mm`;
+  if (a < 0.01 * AU) return `${num(m / 1e9, digits)} Gm`;
+  if (a < 0.05 * LY) return `${num(m / AU, digits)} AU`;
+  if (a < 1000 * PC) return `${num(m / LY, digits)} ly`;
+  return `${num(m / KPC, digits)} kpc`;
+}

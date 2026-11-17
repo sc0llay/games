@@ -1,5 +1,6 @@
 import { el, iconButton } from 'orion/ui/dom.js';
-import { formatDistance, formatDuration, C } from 'orion/core/units.js';
+import { formatDuration, C } from 'orion/core/units.js';
+import { formatDistance } from 'orion/ui/format.js';
 import { dominantLevel, LEVEL_NAMES, typeLabel, focalToFov, fovToFocal } from 'orion/ui/format.js';
 
 // ---- measure -------------------------------------------------------------------------------
@@ -10,7 +11,7 @@ export function initMeasure(ctx) {
   const line = document.createElementNS(NS, 'line'), c1 = document.createElementNS(NS, 'circle'), c2 = document.createElementNS(NS, 'circle');
   for (const c of [c1, c2]) c.setAttribute('r', '7');
   svg.append(line, c1, c2); svg.style.display = 'none';
-  const msg = el('span', { role: 'status' });
+  const msg = el('span'); // not a live region: it is rewritten every frame (distance changes); changes are announced via ctx.announce
   const banner = el('div', { class: 'os-measure os-glass os-chrome', hidden: true }, msg, iconButton('close', 'Exit measure tool (Esc)', () => stop()));
   let on = false, a = null, b = null;
   const pa = new Float64Array(3), pb = new Float64Array(3), sa = { x: 0, y: 0, depth: 0 }, sb = { x: 0, y: 0, depth: 0 };

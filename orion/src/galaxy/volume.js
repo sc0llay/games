@@ -52,7 +52,7 @@ float warpG(vec2 xy) { float R = length(xy) + 1e-3, e = max(R - WARPR, 0.0); ret
 float vavg(float z0, float z1, float h) {
   float dz = z1 - z0;
   if (abs(dz) < 0.05 * h) { float c = 1.0 / cosh(clamp(0.5 * (z0 + z1) / h, -40.0, 40.0)); return c * c; }
-  return h * (tanh(z1 / h) - tanh(z0 / h)) / dz;
+  return h * (tanh(clamp(z1 / h, -20.0, 20.0)) - tanh(clamp(z0 / h, -20.0, 20.0))) / dz;
 }
 float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
 float erfA(float x) { float s = sign(x), x2 = x * x; return s * sqrt(1.0 - exp(-x2 * (1.2732395 + 0.147 * x2) / (1.0 + 0.147 * x2))); }
@@ -267,7 +267,7 @@ export class GalaxyVolume {
       vertexShader: QUAD_VERT, fragmentShader: COMPOSITE_FRAG, uniforms: { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uWeight: { value: 1 } },
       blending: THREE.AdditiveBlending, transparent: true, depthTest: false, depthWrite: false,
     });
-    this.rt = null; this.hist = [null, null]; this.histIdx = 0; this.still = 0; this.viewKey = '';
+    this.rt = null; this.hist = [null, null]; this.histIdx = 0; this.still = 0; this.viewKey = new Float64Array(24); 
     this._m4 = new THREE.Matrix4();
     this._e = new Array(9).fill(0);
   }
@@ -396,8 +396,8 @@ export class GalaxyVolume {
     this.ensureRT(Math.max(2, Math.round(w * s)), Math.max(2, Math.round(h * s)));
     const u = this.march.uniforms;
     this.setView(u, frame, cam);
-    const key = viewKey(cam.g, this._e, frame, gainOut, this.shared, this.tune, steps);
-    if (key !== this.viewKey || this.dirty || !this.tune.accumulate) { this.viewKey = key; this.still = 0; this.dirty = false; }
+    const changed = viewKey(this.viewKey, cam.g, this._e, frame, gainOut, this.shared, this.tune, steps);
+    if (changed || this.dirty || !this.tune.accumulate) { this.still = 0; this.dirty = false; }
     if (this.still >= 16) return;              // converged: reuse history
     this.configure(u, cam.g, steps, gainOut, this.still === 0 ? 0 : (frame.time * 60) % 997);
     const prev = renderer.getRenderTarget();
@@ -438,9 +438,17 @@ export class GalaxyVolume {
 }
 const PCm = 3.0856775814913673e16;
 
-// A string key of everything that changes the march image (rounded so float noise does not reset accumulation).
-function viewKey(g, e, frame, gainOut, S, tune, steps) {
-  const r = (x, k) => Math.round(x * k);
-  return [r(g[0], 100), r(g[1], 100), r(g[2], 100), ...e.map((x) => r(x, 1e6)), r(frame.fovY, 1e4), frame.viewport.w, frame.viewport.h,
-    r(gainOut, 1e4), r(S.uHole.value, 1e4), r(S.uFrac.value, 1e4), r(S.uCloudOn.value, 1e4), r(tune.knee, 1e4), r(tune.scat, 1e3), r(tune.gain, 1e4), r(tune.lane, 1e3), steps].join(',');
+// Everything that changes the march image (rounded so float noise does not reset accumulation). Fills a scratch array,
+// compares with the previous one and returns true when it differs (then keeps the new values).
+function viewKey(prev, g, e, frame, gainOut, S, tune, steps) {
+  const r = (x, k) => Math.round(x * k), k = viewKeyScratch;
+  k[0] = r(g[0], 100); k[1] = r(g[1], 100); k[2] = r(g[2], 100);
+  for (let i = 0; i < 9; i++) k[3 + i] = r(e[i], 1e6);
+  k[12] = r(frame.fovY, 1e4); k[13] = frame.viewport.w; k[14] = frame.viewport.h;
+  k[15] = r(gainOut, 1e4); k[16] = r(S.uHole.value, 1e4); k[17] = r(S.uFrac.value, 1e4); k[18] = r(S.uCloudOn.value, 1e4);
+  k[19] = r(tune.knee, 1e4); k[20] = r(tune.scat, 1e3); k[21] = r(tune.gain, 1e4); k[22] = r(tune.lane, 1e3); k[23] = steps;
+  let diff = false;
+  for (let i = 0; i < 24; i++) if (k[i] !== prev[i]) { diff = true; prev[i] = k[i]; }
+  return diff;
 }
+const viewKeyScratch = new Float64Array(24);

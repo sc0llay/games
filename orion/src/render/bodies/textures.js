@@ -433,6 +433,7 @@ export class TextureGenerator {
     this.scene = new THREE.Scene(); this.scene.add(this.quad);
     this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.materials = new Map();
+    this.jobs = [];
     this.landTex = null;
   }
   get land() {
@@ -466,23 +467,50 @@ export class TextureGenerator {
     rt.texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     return rt;
   }
-  /** spec: { style, colA:[r,g,b] linear, colB, crater, patch, seed }  → { color, data } render targets. */
-  generate(style, w, h, spec = {}) {
-    const m = this.#material(style);
+  #setSpec(m, spec) {
     const u = m.uniforms;
     u.uColA.value.setRGB(...(spec.colA || [0.1, 0.1, 0.1]), THREE.LinearSRGBColorSpace);
     u.uColB.value.setRGB(...(spec.colB || [0.3, 0.3, 0.3]), THREE.LinearSRGBColorSpace);
     u.uParams.value.set(spec.crater ?? 0.4, spec.patch ?? 0.5, spec.seed ?? 0);
-    const r = this.renderer;
+  }
+  /** spec: { style, colA:[r,g,b] linear, colB, crater, patch, seed }  → { color, data } render targets.
+   *  With tiles > 1 the two full-screen draws are split into `tiles` horizontal bands per pass, one band per pump()
+   *  call (so one frame never carries the whole bake); `onDone(maps)` fires when the last band has been drawn. */
+  generate(style, w, h, spec = {}, tiles = 0, onDone = null) {
+    const m = this.#material(style);
+    const color = this.#target(w, h, true), data = this.#target(w, h, false);
+    const maps = { color, data, ready: tiles <= 1 };
+    if (tiles > 1) { this.jobs.push({ m, spec, maps, w, h, tiles, i: 0, onDone }); return maps; }
+    this.#setSpec(m, spec);
+    const u = m.uniforms, r = this.renderer;
     const prevRT = r.getRenderTarget(), prevAuto = r.autoClear;
     const prevClear = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
     r.autoClear = false;
     this.quad.material = m;
-    const color = this.#target(w, h, true), data = this.#target(w, h, false);
     u.uPass.value = 0; r.setRenderTarget(color); r.render(this.scene, this.cam);
     u.uPass.value = 1; r.setRenderTarget(data); r.render(this.scene, this.cam);
     r.setRenderTarget(prevRT); r.autoClear = prevAuto; r.setClearColor(prevClear, prevAlpha);
-    return { color, data };
+    onDone?.(maps);
+    return maps;
+  }
+  /** Draw up to `n` pending bands of the tiled bakes. */
+  pump(n = 1) {
+    const r = this.renderer;
+    while (n-- > 0 && this.jobs.length) {
+      const j = this.jobs[0], { m, maps } = j, u = m.uniforms;
+      this.#setSpec(m, j.spec);
+      const pass = j.i < j.tiles ? 0 : 1, band = j.i % j.tiles, rt = pass ? maps.data : maps.color;
+      const y0 = Math.floor(j.h * band / j.tiles), y1 = Math.floor(j.h * (band + 1) / j.tiles);
+      const prevRT = r.getRenderTarget(), prevAuto = r.autoClear;
+      const prevClear = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
+      r.autoClear = false;
+      this.quad.material = m; u.uPass.value = pass;
+      rt.scissor.set(0, y0, j.w, y1 - y0); rt.scissorTest = true;
+      r.setRenderTarget(rt); r.render(this.scene, this.cam);
+      rt.scissorTest = false;
+      r.setRenderTarget(prevRT); r.autoClear = prevAuto; r.setClearColor(prevClear, prevAlpha);
+      if (++j.i >= j.tiles * 2) { this.jobs.shift(); maps.ready = true; j.onDone?.(maps); }
+    }
   }
   dispose() { for (const m of this.materials.values()) m.dispose(); this.landTex?.dispose(); }
 }

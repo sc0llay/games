@@ -54,7 +54,7 @@ export function createOrbits(app) {
     lines.set(key, L); return L;
   }
 
-  const periodOf = (b) => b?.periodDays ?? b?.period ?? 365.25;
+  const periodOf = (b) => Math.abs(b?.periodDays ?? b?.period ?? 365.25) || 365.25; // retrograde moons (Triton) have negative periods
   function rebuild(L, jd) {
     try {
       L.path = L.pathFn(jd);
@@ -111,10 +111,21 @@ export function createOrbits(app) {
     const allowRebuild = nowReal - lastBuildReal > 400;
     let rebuilt = false;
 
+    // Rebuild the single most stale line (largest Δjd / refresh, or one with no path yet) rather than the first one found,
+    // so Mercury cannot monopolise the 400 ms slot at fast time rates and starve the outer planets.
+    let stale = null, worst = 1;
+    for (const L of lines.values()) {
+      if (L.kind !== 'planet' && !extra.has(L.key)) continue;
+      if (!L.path && !L.dead) { if (allowRebuild) { stale = L; worst = Infinity; } continue; }
+      const r = Math.abs(jd - L.jdBuilt) / L.refresh;
+      if (allowRebuild && r > worst) { worst = r; stale = L; }
+    }
+    if (stale && weight > 0.001) { rebuild(stale, jd); rebuilt = true; stale = null; }
+
     for (const L of lines.values()) {
       const show = L.kind === 'planet' || extra.has(L.key);
       if (!show || weight <= 0.001) { L.line.visible = false; continue; }
-      if (!L.path || (allowRebuild && !rebuilt && Math.abs(jd - L.jdBuilt) > L.refresh)) { rebuild(L, jd); rebuilt = true; }
+      if (!L.path && !L.dead) { rebuild(L, jd); rebuilt = true; } // first sight (not in the stale scan, e.g. just promoted): build immediately
       if (L.dead) { L.line.visible = false; continue; }
       if (L.parent === 'sun') { parentPos[0] = parentPos[1] = parentPos[2] = 0; } else eph.heliocentric(L.parent, jd, parentPos);
       const ox = (parentPos[0] - cam[0]) / 1000, oy = (parentPos[1] - cam[1]) / 1000, oz = (parentPos[2] - cam[2]) / 1000;
@@ -125,6 +136,14 @@ export function createOrbits(app) {
         else if (L.kind === 'planet') fade = planetW;
       }
       if (fade < 0.004) { L.line.visible = false; continue; }
+      const u = L.line.material.uniforms;
+      u.uAlpha.value = hl ? 0.8 : L.kind === 'moon' ? 0.3 : 0.175;
+      u.uWeight.value = weight * fade; u.uExpInv.value = expInv; u.uD0.value = d0;
+      u.uFloor.value = hl ? 0.5 : 0.12;
+      L.line.visible = true;
+      // Geometry depends only on the path and the camera-relative origin: skip re-subdividing / re-uploading when neither moved.
+      if (L.gPath === L.path && L.gx === ox && L.gy === oy && L.gz === oz) continue;
+      L.gPath = L.path; L.gx = ox; L.gy = oy; L.gz = oz;
       const n = L.path.length / 3, rel = L.rel.length === n * 3 ? L.rel : (L.rel = new Float64Array(n * 3)), p = L.path;
       for (let i = 0; i < n; i++) { rel[i * 3] = p[i * 3] / 1000 + ox; rel[i * 3 + 1] = p[i * 3 + 1] / 1000 + oy; rel[i * 3 + 2] = p[i * 3 + 2] / 1000 + oz; }
       // Emit with adaptive Catmull-Rom subdivision so the polyline hugs the true ellipse near the camera.
@@ -149,11 +168,6 @@ export function createOrbits(app) {
       out[c * 3] = rel[0]; out[c * 3 + 1] = rel[1]; out[c * 3 + 2] = rel[2]; c++; // close the loop
       L.attr.needsUpdate = true; L.attr.addUpdateRange?.(0, c * 3);
       L.geom.setDrawRange(0, c);
-      const u = L.line.material.uniforms;
-      u.uAlpha.value = hl ? 0.8 : L.kind === 'moon' ? 0.3 : 0.175;
-      u.uWeight.value = weight * fade; u.uExpInv.value = expInv; u.uD0.value = d0;
-      u.uFloor.value = hl ? 0.5 : 0.12;
-      L.line.visible = true;
     }
     if (rebuilt) lastBuildReal = nowReal;
   }

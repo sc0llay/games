@@ -1,6 +1,6 @@
 import { el, icon } from 'orion/ui/dom.js';
 import { buildIndex, search } from 'orion/ui/fuzzy.js';
-import { formatDistance } from 'orion/core/units.js';
+import { formatDistance } from 'orion/ui/format.js';
 import { LEVEL_NAMES, levelOf, typeLabel } from 'orion/ui/format.js';
 
 export function initSearch(ctx) {

@@ -14,19 +14,23 @@ const EARTH_MOON_MASS_RATIO = 81.30057; // Earth = EMB - Moon_geocentric / (1 + 
 const PLANETS = new Set(['mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']);
 const GM = { sun: 1.32712440018e20, earth: 3.986004418e14, mars: 4.282837e13, jupiter: 1.26686534e17, saturn: 3.7931207e16, uranus: 5.793951e15, neptune: 6.836529e15, pluto: 8.696e11 };
 
-// Memo: one Float64Array per body, valid for the jd it was computed at.
+// Memo: a small ring (NSLOT entries) of Float64Arrays per body, each valid for the jd it was computed at. One slot is not
+// enough: callers probe jd + 0.01 per moon (fillMatrix), which would evict the parent planet's entry every time.
+const NSLOT = 4;
 const cache = new Map();
 const tmpA = new Float64Array(3), tmpB = new Float64Array(3);
 
-function slot(id) {
-  let c = cache.get(id);
-  if (!c) { c = { jd: NaN, v: new Float64Array(3) }; cache.set(id, c); }
+function slot(id, jd) {
+  let r = cache.get(id);
+  if (!r) { r = { s: Array.from({ length: NSLOT }, () => ({ jd: NaN, v: new Float64Array(3) })), next: 0 }; cache.set(id, r); }
+  for (let i = 0; i < NSLOT; i++) if (r.s[i].jd === jd) return r.s[i];
+  const c = r.s[r.next]; r.next = (r.next + 1) % NSLOT; c.jd = NaN; // evict the oldest; jd is set once computed
   return c;
 }
 
 // Internal: cached position array (do not mutate) of body `id` at jd.
 function get(id, jd) {
-  const c = slot(id);
+  const c = slot(id, jd);
   if (c.jd === jd) return c.v;
   const v = c.v;
   if (id === 'sun') { v[0] = v[1] = v[2] = 0; }

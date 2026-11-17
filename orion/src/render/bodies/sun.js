@@ -62,6 +62,7 @@ void main() {
     spot = min(spot, v);
   }
   col *= spot;
+  col = min(col, vec3(6e4));   // half-float max is 65504: Inf * 0 -> NaN would smear through bloom
   gl_FragColor = vec4(col * uFade, uFade);
 }`;
 

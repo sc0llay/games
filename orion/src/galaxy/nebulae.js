@@ -56,7 +56,7 @@ uniform float uPxPerRad, uGain, uMinPx;
 varying vec2 vP;
 varying vec4 vA, vB, vC;
 varying vec3 vTint;
-varying float vI;
+varying float vI, vOct;
 void main() {
   float d = length(aPos), R = aA.x;
   float pxR = R / max(d, 1e-6) * uPxPerRad;
@@ -72,20 +72,24 @@ void main() {
   vec2 c = position.xy * 1.35 * vec2(aB.z, 1.0);   // stretched along x by the elongation so the fragment's falloff fits
   vec2 cr = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y);
   vec3 w = aPos + (e1 * cr.x + e2 * cr.y) * R * scale;
+  vec4 cc = projectionMatrix * modelViewMatrix * vec4(aPos, 1.0);
+  vec2 ext = R * scale * 1.35 * 1.5 * max(aB.z, 1.0) / max(cc.w, 1e-6) * vec2(projectionMatrix[0][0], projectionMatrix[1][1]);
+  vec2 nd = abs(cc.xy / max(cc.w, 1e-9));
+  if (cc.w <= 0.0 || nd.x > 1.0 + ext.x || nd.y > 1.0 + ext.y) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   gl_Position = projectionMatrix * modelViewMatrix * vec4(w, 1.0);
-  vec3 tr = exp(-segTau(uCamG, aGal) * uDust);
-  vP = c; vA = aA; vB = aB; vC = aC; vTint = tr; vI = inten;
+  vP = c; vOct = clamp(log2(max(pxR * scale, 1.0)) - 0.5, 2.0, 5.0);   // octaves worth evaluating at this on-screen size
+  vec3 tr = exp(-segTau(uCamG, aGal) * uDust); vA = aA; vB = aB; vC = aC; vTint = tr; vI = inten;
 }`;
 
 const FRAG = /* glsl */ `
 varying vec2 vP;
 varying vec4 vA, vB, vC;
 varying vec3 vTint;
-varying float vI;
+varying float vI, vOct;
 float h2(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
-float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * vn(p); p = mat2(1.6, -1.2, 1.2, 1.6) * p + 7.3; a *= 0.5; } return s / 0.97; }
+float fbm(vec2 p) { float a = 0.5, s = 0.0, ws = 0.0; for (int i = 0; i < 5; i++) { float w = a * clamp(vOct - float(i), 0.0, 1.0); if (w <= 0.0) break; s += w * vn(p); ws += w; p = mat2(1.6, -1.2, 1.2, 1.6) * p + 7.3; a *= 0.5; } return s / ws * 0.96875 / 0.97; }
 float ridged(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * (1.0 - abs(2.0 * vn(p) - 1.0)); p = mat2(1.6, -1.2, 1.2, 1.6) * p + 3.1; a *= 0.5; } return s / 0.94; }
 const vec3 HA = vec3(1.0, 0.16, 0.26), OIII = vec3(0.12, 0.85, 0.75), NII = vec3(1.0, 0.25, 0.18), BLUE = vec3(0.45, 0.62, 1.0);
 bool flag(float f, float b) { return mod(floor(f / b), 2.0) > 0.5; }

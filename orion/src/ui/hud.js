@@ -1,5 +1,6 @@
 import { el, icon, iconButton } from 'orion/ui/dom.js';
-import { formatDistance, formatDuration, vlen, DAY } from 'orion/core/units.js';
+import { formatDuration, vlen, DAY } from 'orion/core/units.js';
+import { formatDistance } from 'orion/ui/format.js';
 import { RATES } from 'orion/core/time.js';
 import { LEVEL_NAMES, dominantLevel, typeLabel, fmtUtc, parseUtc, niceScale, fmtLatLon, fmtDay } from 'orion/ui/format.js';
 
@@ -9,10 +10,12 @@ export function initBreadcrumb(ctx) {
   const ol = el('ol'); const lvl = el('span', { class: 'os-lvl', 'aria-label': 'Current scale level' });
   const root = el('nav', { class: 'os-bc os-glass os-chrome', 'aria-label': 'Breadcrumb' }, ol, lvl);
   let key = '';
+  // Rebuild only when an entry joining the registry sits on the current trail (a late-registered ancestor).
+  app.registry.addEventListener('add', (ev) => { const foc = app.camera.focus, id = ev.detail?.id; if (foc && (id === foc.id || app.registry.path(foc.id).some((p) => p.id === id))) key = ''; });
   function update(f) {
     const foc = app.camera.focus; if (!foc) return;
     const dom = dominantLevel(f.levels);
-    const k = `${foc.id}|${dom}|${app.registry.map.size}`;
+    const k = `${foc.id}|${dom}`;
     if (k === key) return; key = k;
     ol.textContent = '';
     const path = app.registry.path(foc.id);
@@ -44,12 +47,15 @@ export function initInfo(ctx) {
   const body = el('div', { class: 'body' });
   const root = el('section', { class: 'os-info os-glass os-chrome', 'aria-label': 'Object information', hidden: true }, header, body);
   const phone = matchMedia('(max-width: 699px)');
-  const setCollapsed = (c) => { root.classList.toggle('collapsed', c); toggle.setAttribute('aria-expanded', String(!c)); toggle.setAttribute('aria-label', c ? 'Expand info panel' : 'Collapse info panel'); };
+  let moreCheck = null;
+  const setCollapsed = (c) => { root.classList.toggle('collapsed', c); if (!c && moreCheck) requestAnimationFrame(() => moreCheck()); toggle.setAttribute('aria-expanded', String(!c)); toggle.setAttribute('aria-label', c ? 'Expand info panel' : 'Collapse info panel'); };
   toggle.addEventListener('click', () => setCollapsed(!root.classList.contains('collapsed')));
   title.addEventListener('click', () => { if (phone.matches) toggle.click(); });
   setCollapsed(phone.matches);
 
   let cur = null, cells = {}, gotoRows = [], sig = '', lastLive = 0, lastGoto = 0;
+  // A new child of the focused entry extends its "Go to" list; anything else leaves the panel (scroll, focus) alone.
+  app.registry.addEventListener('add', (ev) => { const a = ev.detail; if (cur && a && (a.parent === cur.id || a.id === cur.id)) sig = ''; });
   const tmp = new Float64Array(3), tmp2 = new Float64Array(3);
   const row = (k, v) => { const dd = el('dd', null, v); return [el('dt', null, k), dd, dd]; };
 
@@ -76,7 +82,10 @@ export function initInfo(ctx) {
       const more = el('button', { type: 'button', class: 'os-link', 'aria-expanded': 'false' }, 'More');
       more.addEventListener('click', () => { const o = d.classList.toggle('open'); more.textContent = o ? 'Less' : 'More'; more.setAttribute('aria-expanded', String(o)); });
       body.append(d, more);
-      requestAnimationFrame(() => { if (d.scrollHeight <= d.clientHeight + 1 && !d.classList.contains('open')) more.hidden = true; });
+      // Overflow can only be measured while the panel is laid out: a collapsed phone sheet is display:none (both heights 0).
+      const check = () => { if (!d.classList.contains('open') && d.clientHeight > 0) more.hidden = d.scrollHeight <= d.clientHeight + 1; };
+      more.hidden = true; moreCheck = () => { if (d.isConnected) check(); };
+      requestAnimationFrame(() => { if (!root.classList.contains('collapsed')) check(); else more.hidden = false; });
     }
     const kids = app.registry.children(e.id).filter((c) => c.name).sort((a, b) => (b.priority || 0) - (a.priority || 0) || a.name.localeCompare(b.name));
     if (kids.length) {
@@ -117,8 +126,7 @@ export function initInfo(ctx) {
     const e = app.camera.focus;
     if (!e) { root.hidden = true; return; }
     root.hidden = false;
-    const s = `${e.id}|${app.registry.map.size}`;
-    if (s !== sig) { sig = s; build(e); live(f); }
+    if (e.id !== sig) { sig = e.id; build(e); live(f); }
     if (now - lastLive > 250) { lastLive = now; live(f); }
     if (now - lastGoto > 2000) { lastGoto = now; refreshGoto(); }
   }
@@ -171,13 +179,17 @@ export function initTimeline(ctx) {
     const bar = root.firstChild; let lastH = 0;
     new ResizeObserver(() => { const h = Math.ceil(bar.getBoundingClientRect().height); if (h && h !== lastH) { lastH = h; ctx.root.style.setProperty('--os-bar', `${h}px`); } }).observe(bar);
   }
+  let shownPaused = null;
   const sync = () => {
     const ok = galOK();
     chips.forEach((c, i) => { const on = i === T.rateIndex; c.setAttribute('aria-pressed', String(on)); c.classList.toggle('on', on); c.disabled = !!RATES[i].galactic && !ok && !on; });
     const r = RATES[T.rateIndex];
     rateOne.textContent = `${T.direction < 0 ? '−' : ''}${r.label}`;
-    pauseB.firstChild.replaceWith(icon(T.paused ? 'play' : 'pause'));
-    pauseB.setAttribute('aria-label', T.paused ? 'Play' : 'Pause'); pauseB.classList.toggle('on', T.paused);
+    if (shownPaused !== T.paused) {
+      shownPaused = T.paused;
+      pauseB.firstChild.replaceWith(icon(T.paused ? 'play' : 'pause'));
+      pauseB.setAttribute('aria-label', T.paused ? 'Play' : 'Pause'); pauseB.classList.toggle('on', T.paused);
+    }
     revB.setAttribute('aria-pressed', String(T.direction < 0));
     badge.hidden = !T.approximate;
   };

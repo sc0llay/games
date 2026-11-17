@@ -5,6 +5,7 @@ import { density, sample, ARMS, MCS, SPUR, R0, Z_SUN, nearestArmCrest, armAzimut
 import { GalaxyVolume } from 'orion/galaxy/volume.js';
 import { GalaxyObjects } from 'orion/galaxy/particles.js';
 import { SkyCube } from 'orion/galaxy/skycube.js';
+import { maxPointHalf } from 'orion/stars/shaders.js';
 import { Nebulae } from 'orion/galaxy/nebulae.js';
 import { ExternalGalaxies } from 'orion/galaxy/external.js';
 
@@ -108,7 +109,7 @@ export async function install(app) {
     state.gainOut = gainOut;
     // Fewer, smaller resolved stars from outside the disc (their light returns to the smooth volume).
     vol.shared.uFrac.value = 1 - (1 - shared.tune.outsideStarFrac) * p.outside;
-    objs.shared.uMaxHalf.value = 96 - (96 - shared.tune.outsideMaxHalf) * p.outside;
+    objs.shared.uMaxHalf.value = maxPointHalf(app.renderer) - (maxPointHalf(app.renderer) - shared.tune.outsideMaxHalf) * p.outside;
     // Same edge-on lane contrast the volume march applies (uLane): resolved stars and nebula billboards sit behind the same
     // dust, so without this the lane is dark in the smooth light but stars shine straight through it from outside the disc.
     const lane = 1 + vol.tune.lane * p.outside;

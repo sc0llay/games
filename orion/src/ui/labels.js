@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { el } from 'orion/ui/dom.js';
-import { PC, LY, smoothstep as sm, formatDistance } from 'orion/core/units.js';
+import { PC, LY, smoothstep as sm } from 'orion/core/units.js';
+import { formatDistance } from 'orion/ui/format.js';
 
 const MAX = 120, GRID = 24;
 
@@ -67,10 +68,15 @@ export function initLabels(ctx) {
     layer.append(b); free.push(b);
   }
 
-  let cands = [], dirty = true, rebuildT = 0;
+  // Backdrop types whose position() is effectively time-invariant over label timescales (proper motion is far below a pixel
+  // per decade): their heliocentric positions are cached in a typed array and refreshed only when jd moves > 10 years.
+  const STATIC = new Set(['star', 'nebula', 'open-cluster', 'planetary', 'snr', 'galaxy', 'globular', 'constellation']);
+  const ST_JD = 3652.5;
+  let cands = [], dirty = true, rebuildT = 0, stPos = new Float64Array(0), stJd = NaN;
   const rebuild = () => {
     dirty = false;
-    cands = app.registry.all().filter((e) => e.name).map((e) => ({ e, x: 0, y: 0, z: 0, d: 0, disc: 0, a: 0, vis: false, pick: false, score: 0 }));
+    cands = app.registry.all().filter((e) => e.name).map((e) => ({ e, st: STATIC.has(e.type), x: 0, y: 0, z: 0, d: 0, disc: 0, a: 0, vis: false, pick: false, score: 0 }));
+    stPos = new Float64Array(cands.length * 3); stJd = NaN; sigOk = false;
   };
   app.registry.addEventListener('add', () => { dirty = true; clearTimeout(rebuildT); rebuildT = setTimeout(rebuild, 200); });
 
@@ -78,8 +84,27 @@ export function initLabels(ctx) {
   const R = new THREE.Vector3(), U = new THREE.Vector3(), F = new THREE.Vector3();
   const grid = new Set();
   let lastLayout = 0, lastOrder = 0, placed = [], maxDisc = 0; // maxDisc: biggest solid disc last pass (px), drives crowding
-  // Screen rects of the opaque UI panels; labels underneath them are dropped.
-  let panels = [], lastPanels = 0;
+  const vis = [], discs = [], NONE = [];
+  // Screen rects of the opaque UI panels; labels underneath them are dropped. Cached; refreshed only when a panel resizes,
+  // appears/disappears, finishes a transition, or the window resizes (no per-250 ms forced layout).
+  let panels = [], panelsDirty = true, lastPanels = 0, panelsVer = 0;
+  const markPanels = () => { panelsDirty = true; };
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(markPanels) : null;
+  addEventListener('resize', markPanels);
+  const root = ctx.root || document.getElementById('ui');
+  if (root) {
+    root.addEventListener('transitionend', (ev) => { if (!ev.target.classList?.contains('os-label')) markPanels(); });
+    if (typeof MutationObserver === 'function') new MutationObserver((recs) => { for (const r of recs) if (!layer.contains(r.target)) { markPanels(); break; } }).observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+  }
+  function refreshPanels(now) {
+    panelsDirty = false; lastPanels = now; panelsVer++;
+    const nodes = [...document.querySelectorAll('#ui .os-glass')].filter((n) => n.offsetParent);
+    if (ro) for (const n of nodes) ro.observe(n);
+    panels = nodes.map((n) => n.getBoundingClientRect());
+  }
+  // Skip-signature: camera pos/quat, jd, fov, viewport, label settings, focus, crowding and panel set.
+  const sigNow = new Float64Array(16), sigPrev = new Float64Array(16);
+  let sigOk = false, sigFocus = null, sigCrowd = -1, sigPanels = -1;
   const underPanel = (x, y) => panels.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
 
   function layout(f, now) {
@@ -87,20 +112,31 @@ export function initLabels(ctx) {
     lastLayout = now;
     if (dirty) rebuild();
     const { cssW: W, cssH: H } = f.viewport, q = f.camQuat, cam = f.camPos;
+    if (panelsDirty || (!ro && now - lastPanels > 1000)) refreshPanels(now);
+    const crowd = crowding(maxDisc);
+    sigNow[0] = cam[0]; sigNow[1] = cam[1]; sigNow[2] = cam[2];
+    sigNow[3] = q.x; sigNow[4] = q.y; sigNow[5] = q.z; sigNow[6] = q.w;
+    sigNow[7] = f.jd; sigNow[8] = f.fovY; sigNow[9] = W; sigNow[10] = H;
+    sigNow[11] = app.settings.labelScale || 1; sigNow[12] = app.settings.labels === false ? 0 : 1; sigNow[13] = app.settings.constellations ? 1 : 0;
+    sigNow[14] = f.levels ? f.levels[2] : 0;
+    let same = sigOk && f.focus === sigFocus && crowd === sigCrowd && panelsVer === sigPanels;
+    for (let i = 0; same && i < 15; i++) if (sigNow[i] !== sigPrev[i]) same = false;
+    if (same) { retire(now); return; } // nothing that affects placement changed: keep the DOM as is
+    sigPrev.set(sigNow); sigOk = true; sigFocus = f.focus; sigCrowd = crowd; sigPanels = panelsVer;
+    if (!(Math.abs(f.jd - stJd) <= ST_JD)) { // refresh the static-position cache
+      stJd = f.jd;
+      for (let n = 0; n < cands.length; n++) if (cands[n].st) cands[n].e.position(f.jd, pos), stPos[n * 3] = pos[0], stPos[n * 3 + 1] = pos[1], stPos[n * 3 + 2] = pos[2];
+    }
     R.set(1, 0, 0).applyQuaternion(q); U.set(0, 1, 0).applyQuaternion(q); F.set(0, 0, -1).applyQuaternion(q);
     const tanY = Math.tan((f.fovY * Math.PI) / 360), tanX = (tanY * W) / H;
     const scale = app.settings.labelScale || 1;
-    const vis = [], discs = [];
+    vis.length = 0; discs.length = 0;
     const focus = f.focus;
-    const crowd = crowding(maxDisc); let md = 0;
-    if (now - lastPanels > 250) {
-      lastPanels = now;
-      panels = [...document.querySelectorAll('#ui .os-glass')].filter((n) => n.offsetParent).map((n) => n.getBoundingClientRect());
-    }
+    let md = 0;
     for (let n = 0; n < cands.length; n++) {
       const c = cands[n], e = c.e;
       c.vis = false; c.pick = false;
-      e.position(f.jd, pos);
+      if (c.st) { pos[0] = stPos[n * 3]; pos[1] = stPos[n * 3 + 1]; pos[2] = stPos[n * 3 + 2]; } else e.position(f.jd, pos);
       const dx = pos[0] - cam[0], dy = pos[1] - cam[1], dz = pos[2] - cam[2];
       const z = dx * F.x + dy * F.y + dz * F.z;
       if (z <= 0) continue;
@@ -145,7 +181,7 @@ export function initLabels(ctx) {
       for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) grid.add((gx + 20) * 4096 + gy + 20);
       c.ox = ox; placed.push(c);
     }
-    if (app.settings.labels === false) { render([], now); return; }
+    if (app.settings.labels === false) { render(NONE, now); return; }
     render(placed, now);
   }
 
@@ -160,7 +196,7 @@ export function initLabels(ctx) {
           for (const [k, v] of active) if (!v._seen) { node = v; active.delete(k); break; }
           if (!node) continue;
         }
-        node._entry = c.e; node._tx.textContent = c.e.name; node._fade = 0;
+        node._entry = c.e; node._tx.textContent = c.e.name; node._fade = 0; node._px = node._py = null;
         node.removeAttribute('aria-label');
         active.set(id, node);
       }
@@ -168,20 +204,14 @@ export function initLabels(ctx) {
       node.classList.add('on');
       const tgt = Math.max(0.01, c.a).toFixed(2);
       if (node._op !== tgt) { node.style.opacity = tgt; node._op = tgt; }
-      node.style.transform = `translate(${Math.round(c.x + c.ox)}px,${Math.round(c.y)}px) translateY(-50%)`;
+      const px = Math.round(c.x + c.ox), py = Math.round(c.y);
+      if (node._px !== px || node._py !== py) { node.style.transform = `translate(${px}px,${py}px) translateY(-50%)`; node._px = px; node._py = py; }
       const isF = c.e === app.camera.focus;
       if (node._f !== isF) { node.classList.toggle('is-focus', isF); node._f = isF; }
       const tab = c.a > 0.5 ? '0' : '-1';
       if (node._tab !== tab) { node.tabIndex = +tab; if (tab === '0') node.removeAttribute('aria-hidden'); else node.setAttribute('aria-hidden', 'true'); node._tab = tab; }
     }
-    for (const [k, node] of active) {
-      if (node._seen) continue;
-      if (!node._unseen) { node._unseen = now; node.style.opacity = '0'; node._op = '0'; node.tabIndex = -1; node._tab = '-1'; node.setAttribute('aria-hidden', 'true'); }
-      else if (now - node._unseen > 350 && document.activeElement !== node) {
-        node.classList.remove('on'); node._entry = null; node._unseen = 0; node._f = false; node.classList.remove('is-focus');
-        active.delete(k); free.push(node);
-      }
-    }
+    retire(now);
     // Tab order = nearest first. Only reshuffle when focus is not inside the layer.
     if (now - lastOrder > 600 && !layer.contains(document.activeElement)) {
       lastOrder = now;
@@ -189,6 +219,18 @@ export function initLabels(ctx) {
       let same = true; const kids = layer.children;
       for (let i = 0; i < nodes.length; i++) if (kids[kids.length - nodes.length + i] !== nodes[i]) { same = false; break; }
       if (!same) layer.append(...nodes);
+    }
+  }
+
+  // Fade-out and recycle labels that were not placed this pass (also runs on skipped passes, since it is time-driven).
+  function retire(now) {
+    for (const [k, node] of active) {
+      if (node._seen) continue;
+      if (!node._unseen) { node._unseen = now; node.style.opacity = '0'; node._op = '0'; node.tabIndex = -1; node._tab = '-1'; node.setAttribute('aria-hidden', 'true'); }
+      else if (now - node._unseen > 350 && document.activeElement !== node) {
+        node.classList.remove('on'); node._entry = null; node._unseen = 0; node._f = false; node.classList.remove('is-focus');
+        active.delete(k); free.push(node);
+      }
     }
   }
 
