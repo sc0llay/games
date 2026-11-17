@@ -40,7 +40,7 @@ vec2 craterLayer(vec3 p, float seed, float dens) {
     float x = length(p - c) / rad;
     if (x > 2.6) continue;
     float bowl = x < 1.0 ? -(1.0 - x * x) : 0.0;
-    float rim = exp(-pow((x - 1.0) * 4.5, 2.0)) * 0.35;
+    float rim = exp(-pow(abs((x - 1.0) * 4.5), 2.0)) * 0.35;
     float ejc = x > 1.0 ? exp(-(x - 1.0) * 2.2) : 0.0;
     float fresh = fract(r.y * 11.3);
     h += (bowl + rim) * rad * 2.0;
@@ -109,14 +109,14 @@ void surf(vec3 d, vec2 ll, out vec4 col, out vec4 dat) {
   mount += gbox(ll, vec4(72.0, 102.0, 27.0, 40.0), 4.0) * (0.35 + 0.65 * rid) * 0.9;       // Himalaya / Tibet
   mount += gbox(ll, vec4(75.0, 100.0, 29.0, 36.0), 3.0) * 0.35;                           // plateau
   float andC = -78.0 + 0.5 * clamp(-la, 0.0, 22.0) - 0.2 * max(-22.0 - la, 0.0);
-  mount += exp(-pow((ll.x - andC) / 3.2, 2.0)) * gbox(vec2(0.0, la), vec4(-1.0, 1.0, -55.0, 10.0), 3.0) * (0.4 + 0.6 * rid) * 0.85; // Andes
+  mount += exp(-pow(abs((ll.x - andC) / 3.2), 2.0)) * gbox(vec2(0.0, la), vec4(-1.0, 1.0, -55.0, 10.0), 3.0) * (0.4 + 0.6 * rid) * 0.85; // Andes
   float rocC = -112.0 - 0.45 * (la - 45.0);
-  mount += exp(-pow((ll.x - rocC) / 5.0, 2.0)) * gbox(vec2(0.0, la), vec4(-1.0, 1.0, 32.0, 62.0), 3.0) * (0.3 + 0.7 * rid) * 0.6; // Rockies
-  mount += exp(-pow(length(vec2((ll.x - 10.0) * 0.7, la - 46.5)) / 4.0, 2.0)) * (0.3 + 0.7 * rid) * 0.6; // Alps
-  mount += exp(-pow(length(vec2(ll.x - 45.0, (la - 42.0) * 1.2)) / 4.0, 2.0)) * (0.3 + 0.7 * rid) * 0.5; // Caucasus
-  mount += exp(-pow((ll.x - 60.0) / 2.0, 2.0)) * gbox(vec2(0.0, la), vec4(-1.0, 1.0, 50.0, 68.0), 2.0) * rid * 0.3; // Urals
-  mount += exp(-pow(length(vec2(ll.x - 38.0, la - 3.0) / vec2(4.0, 12.0)), 2.0)) * (0.3 + 0.7 * rid) * 0.4; // East Africa
-  mount += exp(-pow(length(vec2(ll.x - 3.0, la - 33.0) / vec2(8.0, 2.0)), 2.0)) * rid * 0.35;            // Atlas
+  mount += exp(-pow(abs((ll.x - rocC) / 5.0), 2.0)) * gbox(vec2(0.0, la), vec4(-1.0, 1.0, 32.0, 62.0), 3.0) * (0.3 + 0.7 * rid) * 0.6; // Rockies
+  mount += exp(-pow(abs(length(vec2((ll.x - 10.0) * 0.7, la - 46.5)) / 4.0), 2.0)) * (0.3 + 0.7 * rid) * 0.6; // Alps
+  mount += exp(-pow(abs(length(vec2(ll.x - 45.0, (la - 42.0) * 1.2)) / 4.0), 2.0)) * (0.3 + 0.7 * rid) * 0.5; // Caucasus
+  mount += exp(-pow(abs((ll.x - 60.0) / 2.0), 2.0)) * gbox(vec2(0.0, la), vec4(-1.0, 1.0, 50.0, 68.0), 2.0) * rid * 0.3; // Urals
+  mount += exp(-pow(abs(length(vec2(ll.x - 38.0, la - 3.0) / vec2(4.0, 12.0))), 2.0)) * (0.3 + 0.7 * rid) * 0.4; // East Africa
+  mount += exp(-pow(abs(length(vec2(ll.x - 3.0, la - 33.0) / vec2(8.0, 2.0))), 2.0)) * rid * 0.35;            // Atlas
   mount += gbox(ll, vec4(5.0, 18.0, 59.0, 68.0), 3.0) * rid * 0.35;                                      // Scandes
   float greenl = gbox(ll, vec4(-73.0, -12.0, 60.0, 84.0), 4.0) * smoothstep(0.35, 0.5, fbm(d * 3.0 + 1.0, 3) + 0.2 * (la - 60.0) / 24.0) ;
   float ant = smoothstep(-64.0, -78.0, la);
@@ -127,7 +127,7 @@ void surf(vec3 d, vec2 ll, out vec4 col, out vec4 dat) {
 
   // ---- biomes ----
   float moist = fbm(d * 2.5 + vec3(4.0, 1.0, 8.0), 4);
-  float zon = 0.5 + 0.35 * exp(-pow(alat / 12.0, 2.0)) - 0.35 * exp(-pow((alat - 27.0) / 8.0, 2.0)) + 0.12 * exp(-pow((alat - 52.0) / 11.0, 2.0));
+  float zon = 0.5 + 0.35 * exp(-pow(abs(alat / 12.0), 2.0)) - 0.35 * exp(-pow(abs((alat - 27.0) / 8.0), 2.0)) + 0.12 * exp(-pow(abs((alat - 52.0) / 11.0), 2.0));
   float wet = clamp(zon + (moist - 0.5) * 1.0, 0.0, 1.0);
   float desert = 0.0;
   desert = max(desert, gbox(ll, vec4(-17.0, 36.0, 15.0, 31.0), 4.0));         // Sahara
@@ -196,7 +196,7 @@ void surf(vec3 d, vec2 ll, out vec4 col, out vec4 dat) {
   lights *= landF * (1.0 - ice) * (1.0 - desert * 0.9 * (1.0 - pop));
 
   // ---- clouds ----
-  float z = 0.38 + 0.38 * exp(-pow((la - 5.0) / 8.0, 2.0)) - 0.24 * exp(-pow((alat - 25.0) / 9.0, 2.0)) + 0.28 * exp(-pow((alat - 56.0) / 13.0, 2.0)) + 0.1 * smoothstep(75.0, 90.0, alat);
+  float z = 0.38 + 0.38 * exp(-pow(abs((la - 5.0) / 8.0), 2.0)) - 0.24 * exp(-pow(abs((alat - 25.0) / 9.0), 2.0)) + 0.28 * exp(-pow(abs((alat - 56.0) / 13.0), 2.0)) + 0.1 * smoothstep(75.0, 90.0, alat);
   vec3 q = d * 3.2;
   vec3 w = vec3(fbm(q + 1.7, 4), fbm(q + 8.3, 4), fbm(q + 4.1, 4)) - 0.5;
   float cl = fbm(q * 1.3 + w * 1.6, 6);
@@ -284,11 +284,11 @@ void surf(vec3 d, vec2 ll, out vec4 col, out vec4 dat) {
   a *= 1.0 + 0.5 * (cr.y + cr2.y);
   // heights (km relative to datum; 0.3 = datum, span 32 km)
   float h = 0.30 + 0.06 * (n3 - 0.5) + 0.05 * (n - 0.5) - 0.06 * smoothstep(10.0, 50.0, la + (n - 0.5) * 20.0) * 0.5;   // northern lowlands
-  h += 0.9 * exp(-pow(gell(ll, vec4(18.4, -133.8, 4.0, 4.0)), 2.0) * 1.4);                        // Olympus Mons
-  h += 0.45 * exp(-pow(gell(ll, vec4(1.0, -112.0, 5.0, 5.0)), 2.0) * 1.2) + 0.3 * exp(-pow(gell(ll, vec4(-9.0, -121.0, 4.0, 4.0)), 2.0));   // Tharsis volcanoes
-  h += 0.18 * exp(-pow(gell(ll, vec4(10.0, -105.0, 28.0, 20.0)), 2.0));                           // Tharsis bulge
-  h -= 0.25 * exp(-pow(gell(ll, vec4(-42.0, 70.0, 11.0, 9.0)), 2.0));                             // Hellas
-  float vm = exp(-pow((la + 8.0 - 0.0 * ll.x) / 2.2, 2.0)) * smoothstep(-95.0, -85.0, ll.x) * (1.0 - smoothstep(-55.0, -45.0, ll.x));
+  h += 0.9 * exp(-pow(abs(gell(ll, vec4(18.4, -133.8, 4.0, 4.0))), 2.0) * 1.4);                        // Olympus Mons
+  h += 0.45 * exp(-pow(abs(gell(ll, vec4(1.0, -112.0, 5.0, 5.0))), 2.0) * 1.2) + 0.3 * exp(-pow(abs(gell(ll, vec4(-9.0, -121.0, 4.0, 4.0))), 2.0));   // Tharsis volcanoes
+  h += 0.18 * exp(-pow(abs(gell(ll, vec4(10.0, -105.0, 28.0, 20.0))), 2.0));                           // Tharsis bulge
+  h -= 0.25 * exp(-pow(abs(gell(ll, vec4(-42.0, 70.0, 11.0, 9.0))), 2.0));                             // Hellas
+  float vm = exp(-pow(abs((la + 8.0 - 0.0 * ll.x) / 2.2), 2.0)) * smoothstep(-95.0, -85.0, ll.x) * (1.0 - smoothstep(-55.0, -45.0, ll.x));
   h -= 0.18 * vm * (0.6 + 0.4 * ridged(d * 30.0, 3));                                              // Valles Marineris
   a = mix(a, a * 0.55, vm * 0.5);
   h += 0.05 * (cr.x + cr2.x);
@@ -356,7 +356,7 @@ void surf(vec3 d, vec2 ll, out vec4 col, out vec4 dat) {
   vec3 a = mix(vec3(0.115, 0.098, 0.082), vec3(0.19, 0.165, 0.14), n);
   a *= 0.9 + 0.2 * n2;
   float vh = gell(ll, vec4(14.7, -56.0, 12.0, 12.0));      // Valhalla multi-ring basin
-  a *= 1.0 + 1.6 * exp(-vh * vh * 3.0) + 0.5 * exp(-pow(fract(vh * 2.0) - 0.5, 2.0) * 30.0) * smoothstep(5.0, 1.5, vh);
+  a *= 1.0 + 1.6 * exp(-vh * vh * 3.0) + 0.5 * exp(-pow(abs(fract(vh * 2.0) - 0.5), 2.0) * 30.0) * smoothstep(5.0, 1.5, vh);
   a *= 1.0 + 2.3 * cr.y;
   float h = 0.5 + 0.04 * (n - 0.5) + 0.09 * cr.x;
   col = vec4(a, 0.0);
@@ -389,7 +389,7 @@ void surf(vec3 d, vec2 ll, out vec4 col, out vec4 dat) {
   vec2 cr = craterField(d, 0.55, 1.0);
   a *= 0.85 + 0.3 * n2;
   a *= 1.0 + 1.0 * cr.y * (1.0 - 0.5 * dk);
-  float h = 0.5 + 0.05 * (n - 0.5) + 0.09 * cr.x + 0.06 * exp(-pow((ll.y) / 8.0, 2.0)) * 1.0; // equatorial ridge
+  float h = 0.5 + 0.05 * (n - 0.5) + 0.09 * cr.x + 0.06 * exp(-pow(abs((ll.y) / 8.0), 2.0)) * 1.0; // equatorial ridge
   col = vec4(a, 0.0);
   dat = vec4(packH(h), 0.0, 0.0);
 }`;

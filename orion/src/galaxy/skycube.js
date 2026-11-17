@@ -51,7 +51,7 @@ const BLIT_FRAG = /* glsl */ `uniform sampler2D tSrc; varying vec2 vUv; void mai
 export class SkyCube {
   constructor(app, vol, objs, face) {
     this.app = app; this.vol = vol; this.F = face;
-    this.rt = new THREE.WebGLCubeRenderTarget(face, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.rt = new THREE.WebGLCubeRenderTarget(face, { depthBuffer: false, type: THREE.HalfFloatType, format: THREE.RGBAFormat, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.tmp = new THREE.WebGLRenderTarget(face, face, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.layer = objs.layer('cube', face);
     this.layer.setCubeProjection(face);

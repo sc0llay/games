@@ -75,11 +75,12 @@ export async function install(app) {
       currentSettings = s; if (pending === s) pending = null;
       if (s.skyFace !== o.skyFace) {
         // a displayed cube is replaced by a fully captured one; an unused cube (camera far from the Sun) is just re-created
+        if (nextCube) { dropCube(nextCube); nextCube = null; }   // a second tier change before the first swap: drop the orphan
         if (cube.ready && state.wantCube) nextCube = new SkyCube(app, vol, objs, s.skyFace);
         else { dropCube(cube); cube = new SkyCube(app, vol, objs, s.skyFace); }
       }
       building = false;
-    });
+    }, (e) => { console.error('[galaxy] tier rebuild failed', e); building = false; if (pending === s) pending = null; });
   }
 
   // ---- per frame -----------------------------------------------------------------------------------------------

@@ -117,7 +117,7 @@ void main() {
       float arch = ht * sqrt(max(1.0 - x * x, 0.0));
       float d = abs(r - 1.0 - arch);
       float thick = 0.006 + 0.01 * ht;
-      float k = exp(-pow(d / thick, 2.0)) * sin(3.14159265 * age) * act;
+      float k = exp(-pow(abs(d / thick), 2.0)) * sin(3.14159265 * age) * act;
       col += vec3(1.0, 0.3, 0.24) * 320.0 * k;
     }
   }

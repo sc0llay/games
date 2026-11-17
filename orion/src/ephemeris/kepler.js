@@ -55,11 +55,15 @@ export function perifocalToEcliptic(xp, yp, I, w, node, out) {
   return out;
 }
 
+const SEC_T_MIN = (RANGE_START - 2451545.0) / 36525, SEC_T_MAX = (RANGE_END - 2451545.0) / 36525;
 const tmp = new Float64Array(3);
 function raw(id, jd, out, useA) {
   const T = (jd - 2451545.0) / 36525;
   const el = (useA ? EL_2A : EL_2B)[id];
-  const a = el[0] + el[1] * T, e = el[2] + el[3] * T, I = (el[4] + el[5] * T) * DEG;
+  // The secular rates of a, e and I are linear fits valid for 3000 BC - 3000 AD; extrapolated over ~0.3-3 Myr they drive e
+  // past 1 (NaN positions). They are frozen at the table edge; mean longitude and the angles keep advancing.
+  const Ts = Math.max(SEC_T_MIN, Math.min(SEC_T_MAX, T));
+  const a = el[0] + el[1] * Ts, e = Math.min(0.99, Math.max(0, el[2] + el[3] * Ts)), I = (el[4] + el[5] * Ts) * DEG;
   const L = el[6] + el[7] * T, vp = el[8] + el[9] * T, node = (el[10] + el[11] * T);
   let M = L - vp;
   if (!useA && el.length > 12 && !isApproximate(jd)) {

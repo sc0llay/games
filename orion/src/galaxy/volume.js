@@ -279,20 +279,30 @@ export class GalaxyVolume {
     const [nxy, nz] = settings.volumeTex;
     const nPlane = Math.min(4096, nxy * 4), sxy = Math.max(64, nxy >> 1), sz = Math.max(24, nz >> 1);
     const nW = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 2));
-    for (let i = 0; i < nW; i++) this.workers.push(new Worker(this.app.assets.workerURL('src/galaxy/volume.worker.js')));
+    // Each worker gets ONE message listener and a FIFO of pending replies (a worker answers its jobs in order), so two
+    // slab jobs may safely share a worker; with <= 4 cores the coarse plane and sph jobs both land on worker 0.
+    for (let i = 0; i < nW; i++) {
+      const w = new Worker(this.app.assets.workerURL('src/galaxy/volume.worker.js'));
+      const q = [];
+      w.onmessage = (ev) => q.shift()?.resolve(ev.data);
+      const fail = (ev) => { const err = new Error('volume worker: ' + (ev?.message || 'message error')); ev?.preventDefault?.(); while (q.length) q.shift().reject(err); };
+      w.onerror = fail; w.onmessageerror = fail;
+      w.call = (msg) => new Promise((resolve, reject) => { q.push({ resolve, reject }); w.postMessage(msg); });
+      this.workers.push(w);
+    }
     this.done = new Promise((resolve) => { this._resolve = resolve; });
     this.bakeInfo = { plane: nPlane, sph: [sxy, sxy, sz] };
     // Generic slab job: rows [0, rows) split over the workers.
-    const run = (msg, rows, rowLen, chunk, workers) => new Promise((resolve) => {
+    const run = (msg, rows, rowLen, chunk, workers) => new Promise((resolve, reject) => {
       const data = new Uint16Array(rows * rowLen * 4);
-      let next = 0, pending = 0;
+      let next = 0, pending = 0, failed = false;
       const dispatch = (w) => {
         const r0 = next, r1 = Math.min(rows, next + chunk); next = r1; pending++;
-        w.onmessage = (ev) => {
-          data.set(ev.data.out, ev.data.r0 * rowLen * 4); pending--;
+        w.call({ ...msg, r0, r1 }).then((d) => {
+          if (failed) return;
+          data.set(d.out, d.r0 * rowLen * 4); pending--;
           if (next < rows) dispatch(w); else if (pending === 0) resolve(data);
-        };
-        w.postMessage({ ...msg, r0, r1 });
+        }, (e) => { failed = true; reject(e); });
       };
       for (const w of workers.slice(0, Math.max(1, Math.min(workers.length, Math.ceil(rows / chunk))))) if (next < rows) dispatch(w);
     });
@@ -321,7 +331,7 @@ export class GalaxyVolume {
         const cp = 384, cs = [48, 48, 16];
         const [pc, sc] = await Promise.all([
           run({ kind: 'plane', n: cp }, cp, cp, cp >> 1, this.workers.slice(0, 2)),
-          run({ kind: 'sph', nx: cs[0], ny: cs[1], nz: cs[2] }, cs[2], cs[0] * cs[1], cs[2], this.workers.slice(2, 3).length ? this.workers.slice(2, 3) : this.workers.slice(0, 1)),
+          run({ kind: 'sph', nx: cs[0], ny: cs[1], nz: cs[2] }, cs[2], cs[0] * cs[1], cs[2], this.workers.length > 2 ? this.workers.slice(2, 3) : this.workers.slice(-1)),
         ]);
         swap('tPlane', planeTex(pc, cp)); swap('tVol', sphTex(sc, ...cs));
         this.ready = true; this.dirty = true;
@@ -341,7 +351,12 @@ export class GalaxyVolume {
       for (const w of this.workers) w.terminate();
       this.workers = [];
       this._resolve();
-    })().catch((e) => console.error('[galaxy] volume bake failed', e));
+    })().catch((e) => {
+      console.error('[galaxy] volume bake failed', e);
+      for (const w of this.workers) w.terminate();
+      this.workers = [];
+      this.failed = true; this._resolve();   // never leave callers (tier rebuilds) waiting on a dead bake
+    });
   }
 
   // Per-frame camera context in galaxy axes (Float64 math on the CPU).

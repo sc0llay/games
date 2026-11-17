@@ -98,7 +98,7 @@ void main() {
   vec2 q = p * 2.2 + seed;
   if (cls < 0.5) {                                           // blister HII region
     float n = fbm(q), n2 = fbm(q * 2.3 + 4.1);
-    float body = exp(-pow(r / (0.55 + 0.25 * n), 2.0) * 1.6);
+    float body = exp(-pow(abs(r / (0.55 + 0.25 * n)), 2.0) * 1.6);
     float wisps = smoothstep(0.35, 0.8, ridged(q * 1.3 + n)) * exp(-r * r * 1.4);
     float em = body * (0.35 + 0.9 * n2) + 0.55 * wisps;
     vec2 pc = p - vec2(0.06, 0.08);                          // ionising cluster sits off-centre (blister geometry)
@@ -108,7 +108,7 @@ void main() {
     em = em * (1.0 - 0.2 * vC.z) + 0.9 * fronts * vC.z;
     vec3 col = HA * em + OIII * oiii * (exp(-dot(pc, pc) * 9.0) * (0.35 + 0.9 * n2) + 0.5 * core) + vec3(1.0, 0.92, 0.85) * core * 0.45 * vC.z;
     if (flag(fl, 32.0)) {                                    // M42: Orion Bar (bright ridge) + dark "fish mouth" bay
-      float bar = exp(-pow((dot(pc, vec2(0.7, 0.71)) + 0.2 + 0.04 * n) / 0.035, 2.0)) * smoothstep(0.55, 0.1, abs(dot(pc, vec2(-0.71, 0.7))));
+      float bar = exp(-pow(abs((dot(pc, vec2(0.7, 0.71)) + 0.2 + 0.04 * n) / 0.035), 2.0)) * smoothstep(0.55, 0.1, abs(dot(pc, vec2(-0.71, 0.7))));
       col += (HA * 0.8 + OIII * 0.3) * bar * 1.4;
     }
     // dust: lanes, bays and pillars in absorption
@@ -145,14 +145,14 @@ void main() {
     c = col * (1.0 - dl);
   } else if (cls < 1.5) {                                    // shell HII region
     float n = fbm(q), n2 = fbm(q * 2.7 + 2.0);
-    float sh = smoothstep(hole * 0.7, hole + 0.15, r + 0.12 * n) * exp(-pow(max(r - 0.55, 0.0) * 2.4, 2.0));
+    float sh = smoothstep(hole * 0.7, hole + 0.15, r + 0.12 * n) * exp(-pow(abs(max(r - 0.55, 0.0) * 2.4), 2.0));
     float em = sh * (0.3 + 1.0 * n2) * (1.0 - dust * smoothstep(0.45, 0.7, fbm(q * 1.4 + 9.0)));
     c = HA * em + OIII * oiii * sh * (1.0 - r) * 0.8;
   } else if (cls < 2.5) {                                    // planetary nebula
     float n = fbm(q * 1.5);
     float rr = r;
     if (flag(fl, 8.0)) rr = length(vec2(p.x * (0.6 + 0.9 * abs(p.y)), p.y * 0.85));   // bipolar "apple core"
-    float rim = exp(-pow((rr - (hole + 0.35) * 0.8) / 0.18, 2.0)) * (0.6 + 0.6 * n);
+    float rim = exp(-pow(abs((rr - (hole + 0.35) * 0.8) / 0.18), 2.0)) * (0.6 + 0.6 * n);
     float inner = smoothstep(0.75, 0.05, rr) * (0.6 + 0.4 * n);
     c = OIII * oiii * inner * 0.9 + (HA * 0.6 + NII * 0.4) * rim * 1.1 + OIII * oiii * rim * 0.25;
     if (hole > 0.01) c *= mix(1.0, 0.25 + 0.75 * smoothstep(0.0, hole * 0.8, rr), 0.6);
@@ -180,7 +180,7 @@ void main() {
     c = (HA * 0.75 + vec3(1.0, 0.55, 0.18) * 0.55) * fil * 2.2 + vec3(0.62, 0.72, 1.0) * syn * 0.5;
   } else if (cls < 4.5) {                                    // filamentary arcs
     float a = atan(p.y, p.x);
-    float ring = exp(-pow((r - 0.85 - 0.08 * fbm(vec2(a * 3.0, 0.0) + seed)) / 0.07, 2.0));
+    float ring = exp(-pow(abs((r - 0.85 - 0.08 * fbm(vec2(a * 3.0, 0.0) + seed)) / 0.07), 2.0));
     float fil = smoothstep(0.6, 0.95, ridged(vec2(a * 6.0, r * 14.0) + seed));
     float gap = smoothstep(0.25, 0.6, fbm(vec2(a * 1.5, 1.0) + seed));
     if (flag(fl, 16.0)) gap *= smoothstep(-0.2, 0.4, -p.x);

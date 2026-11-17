@@ -291,7 +291,7 @@ vec3 gasCol(float lon, float lat) {
     vec3 p = vec3(cl, sl, 0.0) * 2.2 + vec3(0.0, 0.0, lat * 7.0);
     vec2 q = vec2(fbm(p * 1.3 + vec3(1.0, 2.0, 3.0), 4), fbm(p * 1.3 + vec3(7.0, 5.0, 9.0), 4)) - 0.5;
     float b = 0.55 * sin((lat + 0.06 * q.x) * 11.0 + 0.3) + 0.3 * sin((lat + 0.04 * q.y) * 23.0 + 1.0) + 0.15 * sin(lat * 37.0);
-    float eq = exp(-pow(lat / 0.09, 2.0));
+    float eq = exp(-pow(abs(lat / 0.09), 2.0));
     float zone = smoothstep(-0.25, 0.25, b + 0.25 * q.y + 0.45 * eq);
     vec3 belt = vec3(0.34, 0.19, 0.11), zn = vec3(0.80, 0.68, 0.50);
     vec3 col = mix(belt, zn, zone);
@@ -385,10 +385,10 @@ void main() {
   if (uGas == 1 && lat > 1.0) {   // north polar hexagon, 78 N
     vec2 p = (PI * 0.5 - lat) * vec2(cos(lon), sin(lon));
     float hd = hexD(p);
-    float edge = exp(-pow((hd - 0.205) / 0.012, 2.0));
+    float edge = exp(-pow(abs((hd - 0.205) / 0.012), 2.0));
     col *= 1.0 - 0.38 * edge;
     col = mix(col, vec3(0.30, 0.42, 0.48), (1.0 - smoothstep(0.17, 0.21, hd)) * 0.55);
-    col *= 1.0 - 0.5 * exp(-pow(hd / 0.025, 2.0));
+    col *= 1.0 - 0.5 * exp(-pow(abs(hd / 0.025), 2.0));
   }
 #ifndef PHOTO
   if (uGas == 3) {   // Great Dark Spot and companion cloud

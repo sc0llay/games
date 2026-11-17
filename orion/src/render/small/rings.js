@@ -89,7 +89,7 @@ void main() {
   }
   // Saturnshine: light reflected by the planet's lit hemisphere (strongest on the sunward half, absent in the night half).
   vec3 Ph = vec3(normalize(P.xy), 0.0);
-  float shine = 0.5 * uPlanetAlbedo * pow(uPlanetR / max(r, uPlanetR), 2.0) * 0.5 * (1.0 + dot(L, Ph)) * trans;
+  float shine = 0.5 * uPlanetAlbedo * pow(abs(uPlanetR / max(r, uPlanetR)), 2.0) * 0.5 * (1.0 + dot(L, Ph)) * trans;
   vec3 rad = albedo * (R * shadow + shine) * uSunE;
 
   // Under the ice-chunk field the flat sheet is dimmed (the chunks carry the detail) but kept as the fine-particle background.

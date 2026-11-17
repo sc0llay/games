@@ -24,6 +24,12 @@ export async function install(app) {
   if (!buf) { console.warn('[stars] data/hyg.bin missing'); shared.ready = Promise.resolve(); return; }
   const cat = decodeHyg(buf);
   const n = cat.count;
+  // hyg.bin stores int16 positions (~0.015 pc steps): a named star would be drawn up to ~1,500 AU from its registry entry,
+  // so "fly to Sirius" ended in empty space. Named stars take their exact positions from stars-named.json.
+  if (named) for (const s of named) {
+    if (s.far || !(s.i >= 0 && s.i < n) || !s.pos) continue;
+    cat.pos[s.i * 3] = s.pos[0]; cat.pos[s.i * 3 + 1] = s.pos[1]; cat.pos[s.i * 3 + 2] = s.pos[2];
+  }
   shared.count = n; shared.catalogue = cat;
   shared.ready = Promise.resolve();
 

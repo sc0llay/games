@@ -126,11 +126,19 @@ export async function install(app) {
 
   // Per-frame work.
   let idle = false, lastBc = 0;
+  // Each component runs in its own try/catch: one throwing entry (e.g. a body whose position() fails) must not freeze the
+  // timeline, breadcrumb and labels with it. A component's error is logged once per message, not every frame.
+  const seenErr = new Set();
+  const guard = (name, fn) => { try { fn(); } catch (err) { const key = name + ':' + err?.message; if (!seenErr.has(key)) { seenErr.add(key); console.error(`[ui] ${name} update failed`, err); } } };
   app.onFrame((f) => {
     const now = performance.now();
-    labels.layout(f, now);
-    measure.update();
-    bc.update(f); info.update(f, now); corner.update(f, now); tl.update(f, now); ann.update(now);
+    guard('timeline', () => tl.update(f, now));
+    guard('labels', () => labels.layout(f, now));
+    guard('measure', () => measure.update());
+    guard('breadcrumb', () => bc.update(f));
+    guard('info', () => info.update(f, now));
+    guard('corner', () => corner.update(f, now));
+    guard('announcer', () => ann.update(now));
     const busy = ctx.state.searchOpen || dialogs.current || ctx.state.photo || ctx.state.measure;
     const nowIdle = !busy && now - Math.max(app.camera.lastInput, ctx.lastUi) > 4000;
     if (nowIdle !== idle) { idle = nowIdle; root.classList.toggle('os-idle', idle); }

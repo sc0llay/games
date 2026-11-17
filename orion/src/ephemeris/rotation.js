@@ -19,7 +19,15 @@ const MODELS = {
     o[2] = 329.5988 + 6.1385108 * d + 0.01067257 * sin(M1) - 0.00112309 * sin(M2) - 0.0001104 * sin(M3) - 0.00002539 * sin(M4) - 0.00000571 * sin(M5);
   },
   venus: (d, T, o) => { o[0] = 272.76; o[1] = 67.16; o[2] = 160.2 - 1.4813688 * d; },
-  earth: (d, T, o) => { o[0] = -0.641 * T; o[1] = 90 - 0.557 * T; o[2] = 190.147 + 360.9856235 * d; },
+  earth: (d, T, o) => {
+    o[2] = 190.147 + 360.9856235 * d;
+    const Tr = d / 36525;   // unclamped: beyond +-5 centuries the pole follows the 26 kyr precession circle at fixed obliquity
+    if (Math.abs(Tr) <= 5) { o[0] = -0.641 * Tr; o[1] = 90 - 0.557 * Tr; return; }
+    const l = (90 - 1.3969713 * Tr) * DEG, cb = sinE, sb = cosE;   // pole at ecliptic latitude 90 - obliquity
+    const xe = cb * Math.cos(l), ye = cb * Math.sin(l), ze = sb;
+    const y = ye * cosE - ze * sinE, z = ye * sinE + ze * cosE;
+    o[0] = Math.atan2(y, xe) / DEG; o[1] = Math.asin(Math.max(-1, Math.min(1, z))) / DEG;
+  },
   mars: (d, T, o) => {
     const a = 0.5042615 * T;
     o[0] = 317.269202 - 0.10927547 * T + 0.000068 * sin(198.991226 + 19139.4819985 * T) + 0.000238 * sin(226.292679 + 38280.8511281 * T) + 0.000052 * sin(249.663391 + 57420.7251593 * T) + 0.000009 * sin(266.18351 + 76560.636795 * T) + 0.419057 * sin(79.398797 + a);
@@ -85,7 +93,9 @@ const scratch = [0, 0, 0];
 export function poleW(id, jd, out = scratch) {
   const m = MODELS[id];
   if (!m) return false;
-  m((jd - 2451545.0), (jd - 2451545.0) / 36525, out);
+  // The pole terms are linear in T and only valid for a few centuries; unclamped, Earth's axis is 56 deg off by 10 kyr.
+  // T is held at +-50 centuries for the pole; W keeps spinning from d.
+  m((jd - 2451545.0), Math.max(-50, Math.min(50, (jd - 2451545.0) / 36525)), out);
   return true;
 }
 export const hasIauModel = (id) => id in MODELS;

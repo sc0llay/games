@@ -20,6 +20,13 @@ export const minDistance = (e) => (e && e.radius > 0 ? e.radius * (e.surfaceMinF
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _o = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 
+// Physical key -> held-key name used by #keysUpdate / #flyUpdate.
+const HELD_KEYS = {
+  ArrowLeft: 'arrowleft', ArrowRight: 'arrowright', ArrowUp: 'arrowup', ArrowDown: 'arrowdown',
+  KeyQ: 'q', KeyE: 'e', KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyR: 'r', KeyC: 'c',
+  Equal: '+', NumpadAdd: '+', Minus: '-', NumpadSubtract: '-',
+};
+
 export class CameraController extends EventTarget {
   constructor(app) {
     super();
@@ -254,8 +261,8 @@ export class CameraController extends EventTarget {
     if (o && k.has('arrowdown')) this.trackball(0, o);
     if (k.has('q')) { if (this.mode === 'fly') this.quat.multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), r)); else this.roll += r; }
     if (k.has('e')) { if (this.mode === 'fly') this.quat.multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), -r)); else this.roll -= r; }
-    if (k.has('+') || k.has('=')) this.zoomBy(Math.pow(WHEEL_RATIO, -dt * 8));
-    if (k.has('-') || k.has('_')) this.zoomBy(Math.pow(WHEEL_RATIO, dt * 8));
+    if (k.has('+')) this.zoomBy(Math.pow(WHEEL_RATIO, -dt * 8));
+    if (k.has('-')) this.zoomBy(Math.pow(WHEEL_RATIO, dt * 8));
   }
   #panBy(dx, dy) {
     if (this.mode !== 'orbit' || this.transition) return;
@@ -324,13 +331,17 @@ export class CameraController extends EventTarget {
       const k = e.key.toLowerCase();
       if (k === 'f') { this.setMode(this.mode === 'fly' ? 'orbit' : 'fly'); return; }
       if (k === 'escape' || k === 'backspace') { if (this.mode === 'fly') this.setMode('orbit'); else this.back(); e.preventDefault(); return; }
-      if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'q', 'e', '+', '=', '-', '_', 'w', 'a', 's', 'd', 'r', 'c'].includes(k)) {
-        if (k.startsWith('arrow') && e.target !== document.body && e.target !== el) return; // let focused controls use arrows
-        this.keys.add(k); if (k.startsWith('arrow')) e.preventDefault();
+      // Held keys are tracked by physical key (e.code), so a Shift released before '=' cannot leave '+' stuck down, and
+      // WASD/QE/RC sit in the same place on AZERTY and other layouts.
+      const hk = HELD_KEYS[e.code];
+      if (hk) {
+        if (hk.startsWith('arrow') && e.target !== document.body && e.target !== el) return; // let focused controls use arrows
+        this.keys.add(hk); if (hk.startsWith('arrow')) e.preventDefault();
       }
       if (e.shiftKey) this.keys.add('shift');
     });
-    addEventListener('keyup', (e) => { this.keys.delete(e.key.toLowerCase()); if (!e.shiftKey) this.keys.delete('shift'); });
+    addEventListener('keyup', (e) => { const hk = HELD_KEYS[e.code]; if (hk) this.keys.delete(hk); if (!e.shiftKey) this.keys.delete('shift'); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.keys.clear(); });
     addEventListener('blur', () => this.keys.clear());
   }
 }

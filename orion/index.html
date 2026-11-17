@@ -15,6 +15,8 @@
   #poster { position: fixed; inset: 0; background: #000 radial-gradient(ellipse at 50% 55%, #2a2418 0%, #0b0a10 35%, #000 70%); display: grid; place-items: center;
     font: 500 13px/1.4 system-ui, sans-serif; letter-spacing: .3em; text-transform: uppercase; color: var(--dim); transition: opacity 1s ease; z-index: 50; }
   #poster.gone { opacity: 0; pointer-events: none; }
+  #poster .fatal { max-width: 34em; padding: 0 24px; text-align: center; letter-spacing: normal; text-transform: none; font-size: 15px; color: var(--fg); }
+  #poster .fatal b { display: block; margin-bottom: .6em; letter-spacing: .3em; text-transform: uppercase; font-size: 13px; color: var(--dim); }
 </style>
 <!-- ORION:IMPORTMAP — tools/build.py replaces this block with an inlined map. -->
 <script type="importmap">
@@ -26,6 +28,7 @@
 <canvas id="scene" tabindex="0" aria-label="3D view of the Milky Way and the Solar System"></canvas>
 <div id="ui"></div>
 <div id="poster" aria-hidden="true">Orion Spur</div>
+<noscript><div style="position:fixed;inset:0;display:grid;place-items:center;background:#000;color:#e8ecf2;font:15px system-ui,sans-serif;z-index:60">Orion Spur needs JavaScript and WebGL 2.</div></noscript>
 <script type="module">import 'orion/main.js';</script>
 </body>
 </html>

@@ -122,7 +122,7 @@ void main() {
     if (r2 > 2.25) discard;
     vec2 q = vP + vSeed * 37.0;
     float n = fbm(q * 2.2), n2 = fbm(q * 4.7 + 5.0);
-    float shell = exp(-pow((sqrt(r2) - 0.45) * 2.3, 2.0)) * (0.55 + 0.9 * n);
+    float shell = exp(-pow(abs((sqrt(r2) - 0.45) * 2.3), 2.0)) * (0.55 + 0.9 * n);
     float body = exp(-r2 * 2.2) * (0.35 + 0.9 * n2);
     float core = exp(-r2 * 9.0) * (0.5 + 0.5 * n);
     vec3 Ha = vec3(1.0, 0.13, 0.24), OIII = vec3(0.04, 0.62, 0.55);

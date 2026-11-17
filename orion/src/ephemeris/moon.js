@@ -49,14 +49,16 @@ const tmp = new Float64Array(3);
 
 // Geocentric ecliptic coordinates of the Moon, mean equinox of date: { lon (deg), lat (deg), distKm }.
 export function moonEclipticOfDate(jd, res = {}) {
-  const T = (jd - 2451545.0) / 36525, T2 = T * T, T3 = T2 * T, T4 = T3 * T;
+  // Linear terms run free; the T^2..T^4 polynomials and the eccentricity factor E are only valid for a few millennia
+  // (unclamped, E2 reaches ~6e4 at 1 Myr and the distance runs to millions of km), so they use T held at +-50 centuries.
+  const T = (jd - 2451545.0) / 36525, Tc = Math.max(-50, Math.min(50, T)), T2 = Tc * Tc, T3 = T2 * Tc, T4 = T3 * Tc;
   const Lp = 218.3164477 + 481267.88123421 * T - 0.0015786 * T2 + T3 / 538841 - T4 / 65194000;
   const D = (297.8501921 + 445267.1114034 * T - 0.0018819 * T2 + T3 / 545868 - T4 / 113065000) * DEG;
   const M = (357.5291092 + 35999.0502909 * T - 0.0001536 * T2 + T3 / 24490000) * DEG;
   const Mp = (134.9633964 + 477198.8675055 * T + 0.0087414 * T2 + T3 / 69699 - T4 / 14712000) * DEG;
   const F = (93.2720950 + 483202.0175233 * T - 0.0036539 * T2 - T3 / 3526000 + T4 / 863310000) * DEG;
   const A1 = (119.75 + 131.849 * T) * DEG, A2 = (53.09 + 479264.290 * T) * DEG, A3 = (313.45 + 481266.484 * T) * DEG;
-  const E = 1 - 0.002516 * T - 0.0000074 * T2, E2 = E * E;
+  const E = 1 - 0.002516 * Tc - 0.0000074 * T2, E2 = E * E;
   let sl = 0, sr = 0, sb = 0;
   for (let i = 0; i < LR.length; i++) {
     const t = LR[i], arg = t[0] * D + t[1] * M + t[2] * Mp + t[3] * F;
@@ -78,14 +80,14 @@ export function moonEclipticOfDate(jd, res = {}) {
 const ecl = {};
 // Geocentric Moon position, ecliptic J2000, metres (precessed with the Meeus ch. 21 ecliptic angles).
 export function moonGeocentric(jd, out) {
-  const T = (jd - 2451545.0) / 36525;
+  const T = (jd - 2451545.0) / 36525, Tc = Math.max(-50, Math.min(50, T));
   moonEclipticOfDate(jd, ecl);
   const lon = ecl.lon * DEG, lat = ecl.lat * DEG, r = ecl.distKm * 1e3;
   const cb = Math.cos(lat);
   const x = r * cb * Math.cos(lon), y = r * cb * Math.sin(lon), z = r * Math.sin(lat);
-  const eta = (47.0029 * T - 0.03302 * T * T + 0.000060 * T * T * T) * ARC;
-  const Pi = (174.876384 * 3600 - 869.8089 * T + 0.03536 * T * T) * ARC;
-  const p = (5029.0966 * T + 1.11113 * T * T - 0.000006 * T * T * T) * ARC;
+  const eta = (47.0029 * Tc - 0.03302 * Tc * Tc + 0.000060 * Tc * Tc * Tc) * ARC;
+  const Pi = (174.876384 * 3600 - 869.8089 * Tc + 0.03536 * Tc * Tc) * ARC;
+  const p = (5029.0966 * T + 1.11113 * Tc * Tc - 0.000006 * Tc * Tc * Tc) * ARC;
   // v0 = Rz(Pi) Rx(+eta) Rz(-(Pi+p)) v_date
   const c1 = Math.cos(Pi + p), s1 = Math.sin(Pi + p);
   const x1 = x * c1 + y * s1, y1 = -x * s1 + y * c1;

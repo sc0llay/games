@@ -124,7 +124,7 @@ void atmMedium(float h, out vec3 sR, out vec3 sM, out vec3 ext) {
   h = max(h, 0.0);
   float dR = exp(-h / uProf.x), dM = exp(-h / uProf.y);
   float dO = uProf.w > 0.0 ? max(0.0, 1.0 - abs(h - uProf.z) / uProf.w) : 0.0;
-  float dD = uDet.y > 0.0 ? exp(-pow((h - uDet.x) / uDet.y, 2.0)) : 0.0;
+  float dD = uDet.y > 0.0 ? exp(-pow(abs((h - uDet.x) / uDet.y), 2.0)) : 0.0;
   sR = uBR * dR;
   sM = uBMs * dM + uBD * dD;
   ext = sR + sM + uBMa * dM + uBO * dO;
