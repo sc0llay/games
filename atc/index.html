@@ -1188,11 +1188,38 @@ function loadAirport(raw) {
   return ap;
 }
 
-// Highest MVA covering point (x, y); falls back to the lowest defined value.
+// Per-airport MVA lookup tables (polygon bounding boxes and the lowest defined value), built once per ap.mva array.
+const MVA_CACHE = new WeakMap();
+function mvaTable(list) {
+  let t = MVA_CACHE.get(list);
+  if (!t) {
+    const bb = new Float64Array(list.length * 4);
+    let low = Infinity;
+    list.forEach((m, i) => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const p of m.poly) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+      bb.set([x0, y0, x1, y1], i * 4);
+      if (m.alt < low) low = m.alt;
+    });
+    t = { bb, low };
+    MVA_CACHE.set(list, t);
+  }
+  return t;
+}
+
+// Highest MVA covering point (x, y); falls back to the lowest defined value. A point strictly outside a polygon's
+// bounding box can never be inside the polygon, so those skip the ray cast.
 function mvaAt(ap, x, y) {
+  const list = ap.mva, t = mvaTable(list), bb = t.bb;
   let best = -1;
-  for (const m of ap.mva) if (m.alt > best && pointInPoly(x, y, m.poly)) best = m.alt;
-  return best < 0 ? Math.min(...ap.mva.map(m => m.alt)) : best;
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i];
+    if (m.alt <= best) continue;
+    const k = i * 4;
+    if (x < bb[k] || x > bb[k + 2] || y < bb[k + 1] || y > bb[k + 3]) continue;
+    if (pointInPoly(x, y, m.poly)) best = m.alt;
+  }
+  return best < 0 ? t.low : best;
 }
 
 function fixPos(ap, name) { return ap.fixes[name] || null; }
@@ -2133,20 +2160,38 @@ function checkSafety(world) {
   const lat = s.sepLateral, vert = s.sepVertical;
   const alerts = [];
   const air = world.aircraft.filter(a => a.phase === 'AIR' && a.alt - ap.elev > 200);
-  for (let i = 0; i < air.length; i++) {
+  // Cheap rejection before the pair maths. A pair can only alert if it is within max(30, lat) nm now (LOS needs
+  // d < lat, the lookahead only runs inside 30 nm) and its altitude bands overlap to within vert - 50 ft. The band of
+  // an aircraft over the lookahead runs from its current altitude to where its vertical speed would take it
+  // (predictAlt never leaves that range), so non-overlapping bands rule out LOS and STCA alike. Verdicts are unchanged.
+  const n = air.length, vlim = vert - 50, hlim = Math.max(30, lat), lat2 = lat * lat * 1.000001;
+  const px = new Float64Array(n), py = new Float64Array(n), lo = new Float64Array(n), hi = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = air[i], e = a.alt + (a.vs / 60) * LOOKAHEAD;
+    px[i] = a.x; py[i] = a.y; lo[i] = Math.min(a.alt, e); hi[i] = Math.max(a.alt, e);
+  }
+  for (let i = 0; i < n; i++) {
     const a = air[i];
-    for (let j = i + 1; j < air.length; j++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = px[j] - px[i], dy = py[j] - py[i];
+      if (dx > hlim || dx < -hlim || dy > hlim || dy < -hlim) continue;
+      if (lo[j] - hi[i] >= vlim || lo[i] - hi[j] >= vlim) continue;
       const b = air[j];
       if (towerPair(a, b, ap, world.t)) continue;
       const dv = Math.abs(a.alt - b.alt);
       const d = dist(a.x, a.y, b.x, b.y);
       if (d < lat - 0.05 && dv < vert - 50) { alerts.push({ type: 'LOS', ids: [a.id, b.id], key: `LOS:${a.id}:${b.id}`, d, dv }); continue; }
       if (d > 30) continue;
+      // closing speed bound: the pair cannot come within lat inside the lookahead if it starts too far apart
+      const rvx = a.vx - b.vx, rvy = a.vy - b.vy;
+      if (d - Math.sqrt(rvx * rvx + rvy * rvy) / 3600 * LOOKAHEAD > lat + 0.01) continue;
       // predicted conflict along current velocity vectors and cleared levels
       for (let t = STEP; t <= LOOKAHEAD; t += STEP) {
         const ax = a.x + a.vx / 3600 * t, ay = a.y + a.vy / 3600 * t;
         const bx = b.x + b.vx / 3600 * t, by = b.y + b.vy / 3600 * t;
-        if (Math.hypot(ax - bx, ay - by) < lat && Math.abs(predictAlt(a, t) - predictAlt(b, t)) < vert - 50) {
+        const ex = ax - bx, ey = ay - by;
+        if (ex * ex + ey * ey > lat2) continue;
+        if (Math.hypot(ex, ey) < lat && Math.abs(predictAlt(a, t) - predictAlt(b, t)) < vert - 50) {
           alerts.push({ type: 'STCA', ids: [a.id, b.id], key: `STCA:${a.id}:${b.id}`, t, d }); break;
         }
       }
@@ -2474,6 +2519,8 @@ const HIST = 12;
 const FL_SPACING = 3.5;    // flawless: spacing buffer, nm
 const FL_H = 150;          // flawless: prediction horizon, s
 const FL_HL = 480;         // flawless: horizon for the handoff check (until the aircraft is gone from the scope)
+const FL_STALE = 3;        // flawless: quiet aircraft are re-predicted every this many thinks
+const FL_HOT = 4.5, FL_HOT_ALT = 1500; // flawless: an aircraft whose closest approach to another (within FL_H s, nm / ft) is inside this is re-predicted every think
 const FL_AREA = 1.5;       // flawless: nm kept clear of active restricted areas
 const FL_LAT0 = 0.8, FL_LAT1 = 1.2; // flawless: lateral buffer on the separation minimum, growing over the horizon
 const FL_TRAJ = new Set(['HDG', 'TURN', 'ALT', 'SPD', 'DCT', 'HOLD', 'ILS', 'RES', 'SN']);
@@ -2500,6 +2547,12 @@ function segDist(px, py, ax, ay, bx, by) {
   const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
   const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
   return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+
+// Signature of everything an instruction or pilot action can change about an aircraft's predicted path.
+function flSig(ac) {
+  const c = ac.clr;
+  return `${ac.phase}|${ac.queue.length}|${ac.nav.mode}|${ac.nav.fix}|${ac.app ? ac.app.rwy + ac.app.state : ''}|${c.alt}|${c.hdg}|${c.spd}|${c.landing}|${ac.route.length}|${ac.missedAt ?? ''}`;
 }
 
 class Assist {
@@ -3392,11 +3445,39 @@ class Assist {
       if (c.phase === 'ROLLOUT' || c.phase === 'GONE' || (H > FL_H && Math.hypot(c.x, c.y) > sw.ap.sectorRadius + 7)) break;
       c.step(1); sw.t += 1;
     }
-    return { ac, pts, ga: c._fl.ga, gaT: c._fl.gaT, missT: c._fl.missT, end: c };
+    return { ac, pts, ga: c._fl.ga, gaT: c._fl.gaT, missT: c._fl.missT, at: w.t };
   }
+  // Refresh the predicted trajectories, staggered: an aircraft is re-flown every think if anything it is doing changed
+  // (instruction, phase, approach state) or if it is on the ground; those on final or with another aircraft close
+  // enough to matter (FL_HOT nm) are re-flown every 2nd think, the rest round-robin every FL_STALE thinks and otherwise keep the last
+  // prediction (at most FL_STALE - 1 s old, about 0.15 nm of drift at 300 kt, well inside the FL_LAT0 buffer).
   flRefresh() {
-    this.flT = new Map();
-    for (const ac of this.w.aircraft) if (['AIR', 'TAKEOFF', 'LINEUP'].includes(ac.phase)) this.flT.set(ac.id, this.flSim(ac));
+    const w = this.w, prev = this.flT, next = new Map(), fly = this._flFly || (this._flFly = []);
+    fly.length = 0;
+    for (const ac of w.aircraft) if (ac.phase === 'AIR' || ac.phase === 'TAKEOFF' || ac.phase === 'LINEUP') fly.push(ac);
+    const tick = this.flTick = (this.flTick || 0) + 1, n = fly.length, hot2 = FL_HOT * FL_HOT;
+    for (let i = 0; i < n; i++) {
+      const ac = fly[i], old = prev.get(ac.id), sig = flSig(ac);
+      const rr = (ac.id + tick) % 6;   // round-robin slot: every 3rd think for quiet aircraft, every 2nd for close ones
+      let fresh = !old || old.sig !== sig || w.t - old.at > FL_STALE - 0.5 || ac.phase !== 'AIR' || rr % 3 === 0;
+      if (!fresh && (rr % 2 === 0 || w.t - old.at > 1.5)) {
+        if (ac.onFinal) fresh = true;
+        for (let j = 0; j < n && !fresh; j++) {
+          if (j === i) continue;
+          const b = fly[j];
+          if (Math.abs(b.alt - ac.alt) > FL_HOT_ALT) continue;
+          const rx = b.x - ac.x, ry = b.y - ac.y;
+          if (rx * rx + ry * ry < 9) { fresh = true; break; }
+          // closest approach of the two current velocity vectors within the horizon
+          const vx = (b.vx - ac.vx) / 3600, vy = (b.vy - ac.vy) / 3600, v2 = vx * vx + vy * vy;
+          const t = v2 > 1e-12 ? Math.min(FL_H, Math.max(0, -(rx * vx + ry * vy) / v2)) : 0;
+          const cx = rx + vx * t, cy = ry + vy * t;
+          if (cx * cx + cy * cy < hot2) fresh = true;
+        }
+      }
+      if (fresh) { const T = this.flSim(ac); T.sig = sig; next.set(ac.id, T); } else next.set(ac.id, old);
+    }
+    this.flT = next;
   }
   flAreaDist(r, x, y) {
     if (r.circle) return Math.hypot(x - r.lx, y - r.ly) - r.circle[1];
@@ -3562,6 +3643,7 @@ const { WAKE_NM } = __m("js/data/aircraft.js");
 const { machToCas } = __m("js/core/atmos.js");
 const { Assist } = __m("js/sim/assist.js");
 const SIM_DT = 0.1;
+const MAX_FRAMES = 2400;   // replay frames kept before the oldest are thinned (see record)
 const SWEEP = 4; // radar antenna period, s
 
 function segIntersect(a, b) {
@@ -4182,7 +4264,19 @@ class World {
   }
 
   record() {
-    this.frames.push({ t: this.t, a: this.aircraft.filter(a => a.phase === 'AIR').map(a => [a.id, a.callsign, a.x, a.y, Math.round(a.alt), Math.round(a.hdg)]) });
+    const a = [];
+    for (const ac of this.aircraft) if (ac.phase === 'AIR') a.push([ac.id, ac.callsign, ac.x, ac.y, Math.round(ac.alt), Math.round(ac.hdg)]);
+    const fr = this.frames;
+    fr.push({ t: this.t, a });
+    // Bounded memory for long endless sessions: past MAX_FRAMES (about 80 min at 2 s) the older half is thinned to
+    // every other frame, in place, so the replay keeps its whole history at a coarser step.
+    if (fr.length > MAX_FRAMES) {
+      const half = fr.length >> 1;
+      let o = 0;
+      for (let i = 0; i < half; i += 2) fr[o++] = fr[i];
+      for (let i = half; i < fr.length; i++) fr[o++] = fr[i];
+      fr.length = o;
+    }
   }
 
   // ---------- main step ----------
@@ -4233,8 +4327,9 @@ class World {
       if (a.kind === 'DEP' && a.route.length === 0 && a.nav.mode === 'ROUTE') { a.nav.mode = 'HDG'; a.clr.hdg = a.hdg; }
     }
     const before = this.aircraft.length;
-    for (const a of this.aircraft) if (a.phase === 'GONE' && !a.removed) { a.removed = true; this.score.stats.trackMiles += a.trackMiles; this.score.stats.fuelKg += a.fuelBurn; this.bus?.emit('remove', a); }
-    this.aircraft = this.aircraft.filter(a => a.phase !== 'GONE');
+    let gone = false;
+    for (const a of this.aircraft) if (a.phase === 'GONE') { gone = true; if (!a.removed) { a.removed = true; this.score.stats.trackMiles += a.trackMiles; this.score.stats.fuelKg += a.fuelBurn; this.bus?.emit('remove', a); } }
+    if (gone) this.aircraft = this.aircraft.filter(a => a.phase !== 'GONE');
     return before !== this.aircraft.length;
   }
 
@@ -4402,6 +4497,13 @@ precision mediump float; in vec4 vCol; out vec4 o; void main() { o = vCol; }`;
 
 const SHAPE = { DOT: 0, RING: 1, SQUARE: 2, DIAMOND: 3, TRI: 4, PLUS: 5, X: 6, FSQUARE: 7, FTRI: 8, GLOW: 9, FDIAMOND: 10 };
 
+// P6: orphan-free in-place upload. The GPU buffer is (re)allocated only when the CPU array's capacity changes.
+function upload(gl, owner, data, count, usage) {
+  const cap = data.byteLength;
+  if (owner.cap !== cap) { gl.bufferData(gl.ARRAY_BUFFER, cap, usage); owner.cap = cap; }
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, count);
+}
+
 class Growable {
   constructor(stride, cap = 256) { this.stride = stride; this.data = new Float32Array(stride * cap); this.n = 0; }
   push() {
@@ -4466,7 +4568,7 @@ class LineBatch {
     gl.useProgram(this.prog.p); setView(gl, this.prog, view, w, h);
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.ibuf);
-    if (this.dirty) { gl.bufferData(gl.ARRAY_BUFFER, this.g.data.subarray(0, this.g.n * 11), gl.DYNAMIC_DRAW); this.dirty = false; }
+    if (this.dirty) { upload(gl, this, this.g.data, this.g.n * 11, gl.DYNAMIC_DRAW); this.dirty = false; }
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.g.n);
     gl.bindVertexArray(null);
   }
@@ -4499,7 +4601,7 @@ class SymbolBatch {
     gl.useProgram(this.prog.p); setView(gl, this.prog, view, w, h);
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.ibuf);
-    if (this.dirty) { gl.bufferData(gl.ARRAY_BUFFER, this.g.data.subarray(0, this.g.n * 9), gl.DYNAMIC_DRAW); this.dirty = false; }
+    if (this.dirty) { upload(gl, this, this.g.data, this.g.n * 9, gl.DYNAMIC_DRAW); this.dirty = false; }
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.g.n);
     gl.bindVertexArray(null);
   }
@@ -4700,6 +4802,38 @@ class Labels {
     this.boxes = new Map(); // id -> { x, y, w, h, ax, ay } (screen css px, box top-left)
     this.slot = new Map();  // id -> candidate index
     this.lastSolve = 0;
+    this.cache = new Map(); // id -> { sig, ln, maxLen }: formatted lines, rebuilt only when an input changes
+    this.sig = [];          // scratch signature, compared element-wise against the cached one
+    this.cwFont = ''; this.cw = 0;
+  }
+
+  // Everything lines() reads, as primitives. Compared in place so a steady aircraft costs no allocation.
+  signature(a, sel) {
+    const g = this.sig, nv = a.nav, ap = a.app, ex = a.emergency;
+    let i = 0;
+    g[i++] = a.callsign; g[i++] = ex; g[i++] = a.nordo; g[i++] = a.medical; g[i++] = a.special;
+    g[i++] = Math.round(a.alt / 100); g[i++] = Math.round(a.clr.alt / 100); g[i++] = Math.abs(a.clr.alt - a.alt) > 150;
+    g[i++] = a.vs > 300 ? 1 : a.vs < -300 ? -1 : 0; g[i++] = Math.round(a.gs / 10); g[i++] = a.type; g[i++] = a.wake;
+    g[i++] = ap ? ap.state : null; g[i++] = ap ? ap.rwy : null; g[i++] = a.clr.landing;
+    g[i++] = nv.mode; g[i++] = a.clr.hdg; g[i++] = nv.fix; g[i++] = nv.hold ? nv.hold.fix : null;
+    g[i++] = a.route.length ? a.route[0] : null; g[i++] = a.clr.spd; g[i++] = a.clr.mach;
+    g[i++] = a.rbErr; g[i++] = sel; g[i++] = a.kind; g[i++] = a.routeName; g[i++] = a.exitFix;
+    return g;
+  }
+
+  linesCached(a, world, sel) {
+    const g = this.signature(a, sel);
+    let e = this.cache.get(a.id);
+    if (e) {
+      const o = e.sig; let same = true;
+      for (let i = 0; i < g.length; i++) if (o[i] !== g[i]) { same = false; break; }
+      if (same) return e;
+    } else { e = { sig: [], ln: null, maxLen: 0 }; this.cache.set(a.id, e); }
+    for (let i = 0; i < g.length; i++) e.sig[i] = g[i];
+    e.ln = this.lines(a, world, sel);
+    let m = 0; for (const l of e.ln) if (l.length > m) m = l.length;
+    e.maxLen = m;
+    return e;
   }
 
   lines(a, world, sel) {
@@ -4780,8 +4914,10 @@ class Labels {
     const r = this.r, c = r.ctx, P = r.pal;
     const scale = f.ui || 1;
     const fs = Math.round(11.5 * scale), lh = Math.round(fs * 1.22);
-    c.font = `${fs}px "Plex Mono", ui-monospace, monospace`;
-    const cw = c.measureText('M').width;
+    const fontR = `${fs}px "Plex Mono", ui-monospace, monospace`, fontB = `600 ${fs}px "Plex Mono", ui-monospace, monospace`;
+    c.font = fontR;
+    if (this.cwFont !== fontR || !this.cw) { this.cw = c.measureText('M').width; this.cwFont = fontR; } // fonts loading late: Radar clears via fonts event
+    const cw = this.cw;
     const items = [];
     for (const a of world.aircraft) {
       const pos = r.positions.get(a.id);
@@ -4789,8 +4925,8 @@ class Labels {
       const [sx, sy] = r.toScreen(pos[0], pos[1]);
       if (sx < -200 || sy < -200 || sx > r.w + 200 || sy > r.h + 200) continue;
       const sel = f.selectedId === a.id;
-      const ln = this.lines(a, world, sel || f.hoverId === a.id);
-      const w = Math.max(...ln.map(l => l.length)) * cw + 8, h = ln.length * lh + 4;
+      const le = this.linesCached(a, world, sel || f.hoverId === a.id), ln = le.ln;
+      const w = le.maxLen * cw + 8, h = ln.length * lh + 4;
       const al = r.alertIds.get(a.id) || 0;
       items.push({ a, sx, sy, ln, w, h, sel, al, scale, prio: (sel ? 10 : 0) + al * 3 + (a.emergency ? 2 : 0) });
     }
@@ -4817,16 +4953,17 @@ class Labels {
       }
       if (it.sel) { c.strokeStyle = col; c.globalAlpha = 0.55; c.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1); c.globalAlpha = 1; }
       c.fillStyle = col; c.textBaseline = 'top'; c.textAlign = 'left';
-      it.ln.forEach((l, i) => {
-        if (i === 0) c.font = `600 ${fs}px "Plex Mono", ui-monospace, monospace`;
-        else if (i === 1) c.font = `${fs}px "Plex Mono", ui-monospace, monospace`;
+      const ln = it.ln;
+      for (let i = 0; i < ln.length; i++) {
+        if (i === 0) c.font = fontB; else if (i === 1) c.font = fontR;
         if (i === 3) c.fillStyle = it.sel ? P.textSel : P.textDim;
-        c.fillText(l, b.x + 4, b.y + 3 + i * lh);
-      });
+        c.fillText(ln[i], b.x + 4, b.y + 3 + i * lh);
+      }
     }
     c.textBaseline = 'middle';
     // remove stale slots
     if (this.slot.size > items.length * 2 + 20) { const ids = new Set(items.map(i => i.a.id)); for (const k of [...this.slot.keys()]) if (!ids.has(k)) this.slot.delete(k); }
+    if (this.cache.size > items.length * 2 + 20) { const ids = new Set(items.map(i => i.a.id)); for (const k of [...this.cache.keys()]) if (!ids.has(k)) this.cache.delete(k); }
   }
 
   hit(sx, sy) {
@@ -5066,10 +5203,24 @@ class Radar {
     this.mapKey = '';
     this.frame = 0;
     this.lost = false;
+    // P9: only re-measure the overlay when something that can change its size happened
+    this.sizeDirty = true;
+    const dirty = () => { this.sizeDirty = true; };
+    window.addEventListener('resize', dirty);
+    try { if (typeof ResizeObserver !== 'undefined') new ResizeObserver(dirty).observe(overlay); } catch (e) { /* fall back to window resize only */ }
+    try { const mq = () => { const m = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`); m.addEventListener('change', () => { dirty(); mq(); }, { once: true }); }; mq(); } catch (e) { /* ignore */ }
+    // P10: static map text is cached on an offscreen canvas
+    this.txt = document.createElement('canvas'); this.txtCtx = this.txt.getContext('2d'); this.txtKey = null;
+    try { document.fonts && document.fonts.addEventListener('loadingdone', () => { this.txtKey = null; this.labels.cw = 0; }); } catch (e) { /* ignore */ }
+    // P15: reusable per-frame scratch
+    this._live = []; this._pos = new Map(); this._alerts = new Map(); this._v = { cx: 0, cy: 0, scale: 1 };
+    this.posPool = new Map(); this._ca = [0, 0, 0, 0]; this._tc = [0, 0, 0, 0]; this._vc = [0, 0, 0, 0]; this.stamp = 0;
+    this.mk = { ap: null, style: '', rr: 0, mva: 0, aw: 0, ss: 0, te: 0, sat: 0, closed: 0 };
+    this.sk = { cx: NaN, cy: NaN, scale: NaN, W: 0, H: 0, style: '', dem: null };
     glCanvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; });
     glCanvas.addEventListener('webglcontextrestored', () => {
       // every GL object died with the context: rebuild them and force the map, underlay and targets to be redrawn
-      try { this.initGL(); this.w = 0; this.mapKey = ''; this.resize(); this.lost = false; } catch (e) { console.warn('radar: could not rebuild after context loss', e); }
+      try { this.initGL(); this.w = 0; this.mapKey = ''; this.txtKey = null; this.resize(true); this.lost = false; } catch (e) { console.warn('radar: could not rebuild after context loss', e); }
     });
   }
 
@@ -5084,13 +5235,15 @@ class Radar {
     this.scene = new Target(gl, 2, 2, this.float);
     this.b1 = new Target(gl, 2, 2, this.float); this.b1b = new Target(gl, 2, 2, this.float);
     this.b2 = new Target(gl, 2, 2, this.float); this.b2b = new Target(gl, 2, 2, this.float);
-    this.satT = new Target(gl, 2, 2, false); this.satKey = ''; this.demId = null; this.demTex = null;
+    this.satT = new Target(gl, 2, 2, false); this.sk && (this.sk.W = 0); this.demId = null; this.demTex = null;
     this.mapKey = '';
   }
 
   get pal() { return PALETTES[this.style]; }
 
-  resize() {
+  resize(force) {
+    if (!force && !this.sizeDirty) return false;
+    this.sizeDirty = false;
     const r = this.overlay.getBoundingClientRect(); // #gl is display:none in tower view
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(2, Math.round(r.width)), h = Math.max(2, Math.round(r.height));
@@ -5099,7 +5252,7 @@ class Radar {
     this.w = w; this.h = h; this.dpr = dpr;
     for (const c of [this.canvas, this.overlay]) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     const W = this.canvas.width, H = this.canvas.height;
-    this.scene.resize(W, H); this.satT.resize(W, H); this.satKey = '';
+    this.scene.resize(W, H); this.satT.resize(W, H); this.sk.W = 0; this.txtKey = null;
     this.b1.resize(W / 2, H / 2); this.b1b.resize(W / 2, H / 2);
     this.b2.resize(W / 8, H / 8); this.b2b.resize(W / 8, H / 8);
     this.setRange(keepRange);
@@ -5121,9 +5274,12 @@ class Radar {
 
   // ---------- static map ----------
   buildMap(ap, s) {
-    const key = [ap.id, this.style, s.rangeRings, s.showMva, s.showAirways, s.showSidStar, s.showTerrain, this.satOn(ap, s), ap.runways.map(r => r.closed).join()].join('|');
-    if (key === this.mapKey) return;
-    this.mapKey = key;
+    const mk = this.mk, sat = this.satOn(ap, s) ? 1 : 0;
+    let closed = 0; for (const r of ap.runways) closed = closed * 2 + (r.closed ? 1 : 0);
+    if (this.mapKey !== '' && mk.ap === ap.id && mk.style === this.style && mk.rr === !!s.rangeRings && mk.mva === !!s.showMva && mk.aw === !!s.showAirways &&
+        mk.ss === !!s.showSidStar && mk.te === !!s.showTerrain && mk.sat === sat && mk.closed === closed) return;
+    this.mapKey = 'built';
+    mk.ap = ap.id; mk.style = this.style; mk.rr = !!s.rangeRings; mk.mva = !!s.showMva; mk.aw = !!s.showAirways; mk.ss = !!s.showSidStar; mk.te = !!s.showTerrain; mk.sat = sat; mk.closed = closed;
     const P = this.pal, { tri, lines, syms } = this.map;
     tri.clear(); lines.clear(); syms.clear();
     for (const poly of ap.land) tri.polygon(poly, triangulate(poly), P.land);
@@ -5213,16 +5369,16 @@ class Radar {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    this.demId = id; this.satKey = '';
+    this.demId = id; this.sk.W = 0;
   }
 
   // Satellite underlay: re-rendered into its own target only when the view changes, then copied in each frame.
   drawSat(ap, v, W, H) {
     const gl = this.gl;
     this.ensureDem(ap.raw.dem);
-    const key = [v.cx, v.cy, v.scale, W, H, this.style, this.demId].join('|');
-    if (key !== this.satKey) {
-      this.satKey = key;
+    const k = this.sk;
+    if (k.cx !== v.cx || k.cy !== v.cy || k.scale !== v.scale || k.W !== W || k.H !== H || k.style !== this.style || k.dem !== this.demId) {
+      k.cx = v.cx; k.cy = v.cy; k.scale = v.scale; k.W = W; k.H = H; k.style = this.style; k.dem = this.demId;
       const p = this.progs.sat; gl.useProgram(p.p); this.satT.bind(); gl.disable(gl.BLEND);
       bindTex(gl, 0, this.demTex, p.u.uDem);
       gl.uniform4f(p.u.uView, v.cx, v.cy, v.scale, 0); gl.uniform2f(p.u.uRes, W, H);
@@ -5243,7 +5399,7 @@ class Radar {
     const gl = this.gl, P = this.pal, ap = world.ap;
     this.buildMap(ap, s);
     const W = this.canvas.width, H = this.canvas.height;
-    const v = { cx: this.view.cx, cy: this.view.cy, scale: this.view.scale * this.dpr };
+    const v = this._v; v.cx = this.view.cx; v.cy = this.view.cy; v.scale = this.view.scale * this.dpr;
     const phos = this.style === 'phosphor';
     const tNow = world.t + f.alpha * SIM_DT;
 
@@ -5251,10 +5407,11 @@ class Radar {
     const L = this.dyn.lines, S = this.dyn.syms, T = this.dyn.top;
     L.clear(); S.clear(); T.clear();
     const ang = ((tNow % SWEEP) / SWEEP) * TAU;
-    const live = world.aircraft.filter(a => a.phase === 'AIR' || a.phase === 'TAKEOFF' || a.phase === 'ROLLOUT');
+    const live = this._live; live.length = 0;
+    for (const a of world.aircraft) if (a.phase === 'AIR' || a.phase === 'TAKEOFF' || a.phase === 'ROLLOUT') live.push(a);
     if (phos) this.sweepPaint(live, ang, tNow, f.alpha);
-    this.positions = new Map();
-    const alertIds = new Map();
+    this.positions = this._pos; this.positions.clear();
+    const alertIds = this._alerts; alertIds.clear();
     for (const al of world.alerts) for (const id of al.ids) {
       const lvl = al.type === 'LOS' || al.type === 'STCA' || al.type === 'RWY' || al.type === 'MSAW' ? 2 : 1;
       alertIds.set(id, Math.max(lvl, alertIds.get(id) || 0));
@@ -5270,7 +5427,8 @@ class Radar {
         if (p) { px = p.x; py = p.y; glow = 0.35 + 0.65 * Math.exp(-(tNow - p.t) / (SWEEP * 0.45)); }
         else continue;
       }
-      this.positions.set(a.id, [px, py]);
+      let pp = this.posPool.get(a.id); if (!pp) { pp = [0, 0]; this.posPool.set(a.id, pp); }
+      pp[0] = px; pp[1] = py; this.positions.set(a.id, pp);
       const sel = f.selectedId === a.id;
       const stealth = a.perf.stealth;
       const al = alertIds.get(a.id) || 0;
@@ -5280,24 +5438,29 @@ class Radar {
       if (sel) col = P.sel;
       // the saucer's return flickers and drops out between plots
       const ufo = a.perf.ufo ? (hash(a.id, Math.floor(tNow * 6)) < 0.3 ? 0.12 : 0.65 + 0.35 * Math.sin(tNow * 17 + a.id)) : 1;
-      const ca = [col[0], col[1], col[2], (col[3] ?? 1) * glow * (stealth ? 0.32 : 1) * ufo];
+      const ca = this._ca; ca[0] = col[0]; ca[1] = col[1]; ca[2] = col[2]; ca[3] = (col[3] ?? 1) * glow * (stealth ? 0.32 : 1) * ufo;
       // trail (one plot per sweep)
       const nTrail = s.trails;
       const hist = a.history;
-      for (let k = 0; k < Math.min(nTrail, hist.length); k++) {
+      const tc = this._tc; tc[0] = P.trail[0]; tc[1] = P.trail[1]; tc[2] = P.trail[2];
+      const pnt = phos ? this.paint.get(a.id) : null, nk = Math.min(nTrail, hist.length);
+      for (let k = 0; k < nk; k++) {
         const hpt = hist[hist.length - 1 - k];
-        if (phos && p0(this.paint.get(a.id), hpt)) continue;
+        if (phos && p0(pnt, hpt)) continue;
         const fade = 1 - k / (nTrail + 1);
-        S.add(hpt.x, hpt.y, phos ? 3.4 : 3, SHAPE.DOT, [P.trail[0], P.trail[1], P.trail[2], 0.55 * fade * (stealth ? 0.4 : 1)]);
+        tc[3] = 0.55 * fade * (stealth ? 0.4 : 1);
+        S.add(hpt.x, hpt.y, phos ? 3.4 : 3, SHAPE.DOT, tc);
       }
       // speed vector
       if (s.vectorMin > 0 && a.phase === 'AIR') {
         const k = s.vectorMin / 60;
-        L.seg(px, py, px + a.vx * k, py + a.vy * k, [ca[0], ca[1], ca[2], 0.8 * glow], sel ? 1.6 : 1.2);
+        const vc = this._vc; vc[0] = ca[0]; vc[1] = ca[1]; vc[2] = ca[2]; vc[3] = 0.8 * glow;
+        L.seg(px, py, px + a.vx * k, py + a.vy * k, vc, sel ? 1.6 : 1.2);
       }
       // target
       if (phos) {
-        S.add(px, py, 22, SHAPE.GLOW, [ca[0], ca[1], ca[2], 0.35 * ca[3]]);
+        const gc = this._vc; gc[0] = ca[0]; gc[1] = ca[1]; gc[2] = ca[2]; gc[3] = 0.35 * ca[3];
+        S.add(px, py, 22, SHAPE.GLOW, gc);
         T.add(px, py, stealth ? 5 : 7, SHAPE.DOT, ca);
       } else {
         const shape = !a.firstContact || a.handedOff ? SHAPE.DIAMOND : a.kind === 'OVR' ? SHAPE.RING : SHAPE.SQUARE;
@@ -5415,9 +5578,9 @@ class Radar {
   sweepPaint(live, ang, tNow, alpha) {
     const prev = this.prevAng;
     const jump = prev == null || Math.abs(tNow - (this.prevT ?? tNow)) > SWEEP * 0.5;
-    const seen = new Set();
+    const stamp = ++this.stamp;
     for (const a of live) {
-      seen.add(a.id);
+      const pe = this.paint.get(a.id); if (pe) pe.seen = stamp;
       const ix = a.px + (a.x - a.px) * alpha, iy = a.py + (a.y - a.py) * alpha;
       const b = (Math.atan2(ix, iy) + TAU) % TAU;
       let hit = jump || !this.paint.has(a.id);
@@ -5426,19 +5589,29 @@ class Radar {
         // stealth: the primary return is faint and sometimes missed altogether
         if (a.perf.stealth && this.paint.has(a.id) && !jump && hash(a.id, Math.floor(tNow / SWEEP)) < 0.35) continue;
         if (a.perf.ufo && this.paint.has(a.id) && !jump && hash(a.id + 7, Math.floor(tNow / SWEEP)) < 0.4) continue;
-        this.paint.set(a.id, { x: ix, y: iy, t: tNow });
+        const q = this.paint.get(a.id);
+        if (q) { q.x = ix; q.y = iy; q.t = tNow; } else this.paint.set(a.id, { x: ix, y: iy, t: tNow, seen: stamp });
       }
     }
-    for (const id of [...this.paint.keys()]) if (!seen.has(id)) this.paint.delete(id);
+    for (const [id, q] of this.paint) if (q.seen !== stamp) this.paint.delete(id);
+    if (this.posPool.size > live.length * 2 + 64) this.posPool.clear();
     this.prevAng = ang; this.prevT = tNow;
   }
 
-  drawOverlay(f) {
+  // P10: map text (fixes, runway ids, rings, compass, MVA, terrain, airways, restricted areas) only changes with the view,
+  // palette, layer toggles or UI scale, so it is rendered to an offscreen canvas and blitted each frame.
+  drawStaticText(f, fs) {
     const { world, settings: s } = f;
-    const c = this.ctx, P = this.pal, ap = world.ap, dpr = this.dpr;
+    const ap = world.ap, v = this.view, k = this.txtKey;
+    let rw = 0; for (const r of ap.runways) for (const e of r.ends) rw = rw * 2 + (e.ils && e.ils.status !== 'OK' ? 1 : 0);
+    const W = this.overlay.width, H = this.overlay.height;
+    if (k && k.ap === ap && k.style === this.style && k.cx === v.cx && k.cy === v.cy && k.scale === v.scale && k.w === this.w && k.h === this.h && k.dpr === this.dpr &&
+        k.fs === fs && k.rr === !!s.rangeRings && k.mva === !!s.showMva && k.te === !!s.showTerrain && k.aw === !!s.showAirways && k.all === (this.range < 45) && k.rw === rw && k.W === W && k.H === H) return;
+    this.txtKey = { ap, style: this.style, cx: v.cx, cy: v.cy, scale: v.scale, w: this.w, h: this.h, dpr: this.dpr, fs, rr: !!s.rangeRings, mva: !!s.showMva, te: !!s.showTerrain, aw: !!s.showAirways, all: this.range < 45, rw, W, H };
+    if (this.txt.width !== W || this.txt.height !== H) { this.txt.width = W; this.txt.height = H; }
+    const c = this.txtCtx, P = this.pal, dpr = this.dpr;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, this.w, this.h);
-    const fs = Math.round(11 * (f.ui || 1));
     c.font = `${fs}px "Plex Mono", ui-monospace, monospace`;
     c.textBaseline = 'middle';
     const on = (x, y) => x > -40 && y > -20 && x < this.w + 40 && y < this.h + 20;
@@ -5482,6 +5655,19 @@ class Radar {
     c.fillStyle = P.textWarn;
     for (const r of ap.restricted) { const [x, y] = this.toScreen(r.lx, r.ly); if (on(x, y)) { c.fillText(r.name, x, y - 6); c.fillText(`${r.ceil / 100 | 0}/${r.floor ? r.floor / 100 | 0 : 'SFC'}`, x, y + 7); } }
     c.textAlign = 'left';
+
+  }
+
+  drawOverlay(f) {
+    const { world, settings: s } = f;
+    const c = this.ctx, P = this.pal, ap = world.ap, dpr = this.dpr;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, this.w, this.h);
+    const fs = Math.round(11 * (f.ui || 1));
+    this.drawStaticText(f, fs);
+    c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.txt, 0, 0); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.font = `${fs}px "Plex Mono", ui-monospace, monospace`;
+    c.textBaseline = 'middle'; c.textAlign = 'left';
 
     // data blocks
     this.labels.draw(f);
@@ -23006,6 +23192,7 @@ const { DEG, hdgVec, clamp, lerp, FT_PER_NM } = __m("js/core/geo.js");
 const FT = 1 / FT_PER_NM;
 const TOP_FOV = 12 * DEG;
 const STRIDE = 17;
+const MAX_DPR = 1.5, MAX_PIXELS = 3.0e6;   // tower canvas backing-store caps (device pixels per CSS pixel, total pixels)
 
 // ---------- tiny mat4 helpers (column-major) ----------
 function perspective(fovy, aspect, n, f) {
@@ -23056,13 +23243,14 @@ float cloudShadow(vec3 w) {
   return 1.0 - cloudAt(c, uCover, uTime) * 0.72;
 }
 vec3 pools(vec3 w) { // flood-lit areas at night
+  if (uNight < 0.004 || uNPools == 0) return vec3(0.0);   // by day the loop contributes nothing
   vec3 s = vec3(0.0);
   for (int i = 0; i < 16; i++) { if (i >= uNPools) break; float d = length(w.xz - uPools[i].xy); s += vec3(1.0, 0.82, 0.6) * smoothstep(uPools[i].z, uPools[i].z * 0.2, d); }
   return s * uNight;
 }
-vec3 lit(vec3 alb, vec3 n, vec3 w) {
+vec3 lit(vec3 alb, vec3 n, vec3 w, float cs) {   // cs: cloudShadow(w), evaluated once per fragment by the caller
   float diff = max(dot(n, uSunDir), 0.0);
-  return alb * (uAmb * (0.6 + 0.4 * n.y) + uSunCol * diff * cloudShadow(w) + pools(w) * 1.4);
+  return alb * (uAmb * (0.6 + 0.4 * n.y) + uSunCol * diff * cs + pools(w) * 1.4);
 }
 `;
 
@@ -23125,10 +23313,10 @@ vec3 stripInfo(vec2 p) {
   }
   return best;
 }
-vec3 litT(vec3 alb, vec3 n, vec3 w, float ao) {
+vec3 litT(vec3 alb, vec3 n, vec3 w, float ao, float cs) {
   float diff = max(dot(n, uSunDir), 0.0);
   vec3 hemi = uAmb * mix(vec3(0.62, 0.58, 0.5), vec3(1.0, 1.04, 1.12), n.y * 0.5 + 0.5);
-  return alb * (hemi * ao + uSunCol * diff * cloudShadow(w) * mix(1.0, ao, 0.6) + pools(w) * 1.4);
+  return alb * (hemi * ao + uSunCol * diff * cs * mix(1.0, ao, 0.6) + pools(w) * 1.4);
 }
 void main() {
   vec2 pa = vec2(vW.x, -vW.z) * 6076.12;            // ft, x east, y north
@@ -23143,7 +23331,20 @@ void main() {
   float bumpAmp = 0.22, bumpLam = 2.6;               // ground relief (ft amplitude / wavelength) for the per-pixel normal
   vec3 c; float u = 0.0, street = 0.0; vec2 g = pa; float ao = 1.0 - 0.32 * max(vC, 0.0) + 0.1 * max(-vC, 0.0);
   float rockMix = 0.0;
-  if (uDesert > 0.5) {
+  // With aerial imagery the procedural ground is replaced outright away from the invented airfield (c = mix(im, ca, vM.w)
+  // below), so skip it there; only the town mask for the night glow is still needed.
+  bool geoOnly = uGeo > 0.5 && vM.w < 0.002;
+  float cs = cloudShadow(vW);
+  if (geoOnly) {
+    c = vec3(0.3);
+    if (uDesert < 0.5 && uNight > 0.01) {
+      g = vec2(pa.x * cos(uGridRot) + pa.y * sin(uGridRot), -pa.x * sin(uGridRot) + pa.y * cos(uGridRot));
+      vec2 gm = abs(mod(g + 200.0, 400.0) - 200.0);
+      float sw = 14.0, gfw = fwidth(g.x) + 1e-3;
+      street = max(1.0 - smoothstep(sw, sw + gfw, gm.y), 1.0 - smoothstep(sw, sw + gfw, gm.x));
+      u = smoothstep(0.02, 0.4, vM.y);
+    }
+  } else if (uDesert > 0.5) {
     // Mojave basin and range: pale alluvium speckled with creosote and sage, strata on the ranges, white cracked playa.
     // vM: x playa, z rock tone, w airfield.
     vec3 fan = vec3(0.64, 0.56, 0.44);
@@ -23266,9 +23467,11 @@ void main() {
   }
   if (hft < 0.0) c = vec3(0.25, 0.27, 0.22);
   // rock on steep slopes (scree and outcrop), with a rugged per-pixel normal
-  vec3 rockC = vec3(0.36, 0.34, 0.31) * (0.78 + 0.4 * n2) * (0.9 + 0.2 * tn(pa / 4.0) * wB + 0.1 * g1 * wA);
-  rockC = mix(rockC, rockC * vec3(1.1, 1.0, 0.9), tn(pa / 70.0));
-  if (uDesert < 0.5) { c = mix(c, rockC, steep); bumpAmp = mix(bumpAmp, 2.5, steep); bumpLam = mix(bumpLam, 9.0, steep); }
+  if (uDesert < 0.5 && !geoOnly) {
+    vec3 rockC = vec3(0.36, 0.34, 0.31) * (0.78 + 0.4 * n2) * (0.9 + 0.2 * tn(pa / 4.0) * wB + 0.1 * g1 * wA);
+    rockC = mix(rockC, rockC * vec3(1.1, 1.0, 0.9), tn(pa / 70.0));
+    c = mix(c, rockC, steep); bumpAmp = mix(bumpAmp, 2.5, steep); bumpLam = mix(bumpLam, 9.0, steep);
+  }
   // real imagery replaces the procedural countryside everywhere but the (invented) airfield and the sea bed
   float gm = 0.0;
   if (uGeo > 0.5) {
@@ -23291,16 +23494,20 @@ void main() {
       vec4 lv = texture(uG4, lu);
       im = mix(im, lv.rgb * 1.06, lv.a * smoothstep(0.0, 0.06, min(le.x, le.y)));
     }
-    // the invented airfield keeps its own grass, toned to the countryside it sits in
-    vec3 av = pow(textureLod(uG0, pn / 12.0 + 0.5, 7.0).rgb, vec3(0.9)) * 1.28;
-    if (uLive.w > 0.5) {
-      vec2 lu = vec2(pn.x - uLive.x, pn.y + uLive.y) / (2.0 * uLive.z) + 0.5, le = min(lu, 1.0 - lu);
-      vec4 lt = textureLod(uG3, lu, 7.0);
-      av = mix(av, lt.rgb * 1.06, lt.a * smoothstep(0.0, 0.03, min(le.x, le.y)));
-    }
-    vec3 ca = mix(c, av * clamp(dot(c, vec3(0.33)) / 0.17, 0.7, 1.4), 0.78);
     gm = 1.0 - vM.w;
-    c = mix(im, ca, vM.w); ao = mix(ao, 1.0, gm);
+    if (geoOnly) c = im;
+    else {
+      // the invented airfield keeps its own grass, toned to the countryside it sits in
+      vec3 av = pow(textureLod(uG0, pn / 12.0 + 0.5, 7.0).rgb, vec3(0.9)) * 1.28;
+      if (uLive.w > 0.5) {
+        vec2 lu = vec2(pn.x - uLive.x, pn.y + uLive.y) / (2.0 * uLive.z) + 0.5, le = min(lu, 1.0 - lu);
+        vec4 lt = textureLod(uG3, lu, 7.0);
+        av = mix(av, lt.rgb * 1.06, lt.a * smoothstep(0.0, 0.03, min(le.x, le.y)));
+      }
+      vec3 ca = mix(c, av * clamp(dot(c, vec3(0.33)) / 0.17, 0.7, 1.4), 0.78);
+      c = mix(im, ca, vM.w);
+    }
+    ao = mix(ao, 1.0, gm);
     bumpAmp = mix(bumpAmp, 0.18, gm); bumpLam = mix(bumpLam, 2.6, gm);
   }
   // per-pixel normal: noise derivatives, fading out before they would alias
@@ -23311,10 +23518,10 @@ void main() {
   n = normalize(mix(n, vec3(0.0, 1.0, 0.0), gm * 0.55));        // the photograph already carries its own relief shading
   ao *= 0.9 + 0.2 * (d1.x * 0.6 + d2.x * 0.4) * mix(1.0, 0.6, fp / (fp + 4.0));
   c = mix(c, c * 0.62, uWet * 0.6);
-  vec3 col = litT(c, n, vW, clamp(ao, 0.3, 1.1));
+  vec3 col = litT(c, n, vW, clamp(ao, 0.3, 1.1), cs);
   // grazing sheen on sunlit grass and a faint sky reflection when wet
   vec3 vd = normalize(uEye - vW);
-  if (uDesert < 0.5) col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 18.0) * 0.045 * (1.0 - steep) * (1.0 - u) * (1.0 - gm) * cloudShadow(vW);
+  if (uDesert < 0.5 && !geoOnly) col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 18.0) * 0.045 * (1.0 - steep) * (1.0 - u) * (1.0 - gm) * cs;
   col += mix(uHor, uZen, 0.2) * uWet * 0.1 * pow(1.0 - max(vd.y, 0.0), 4.0);
   // street lighting glow at night
   col += vec3(1.0, 0.62, 0.28) * uNight * u * (street * 0.55 + 0.05 * step(0.82, hh(ivec2(floor(g / 40.0)))));
@@ -23348,13 +23555,14 @@ void main() {
   vec3 v = normalize(uEye - vW);
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
   vec3 r = reflect(-v, n);
-  vec3 sky = mix(uHor, uZen, pow(clamp(r.y, 0.0, 1.0), 0.45)) * cloudShadow(vW);
+  float cs = cloudShadow(vW);
+  vec3 sky = mix(uHor, uZen, pow(clamp(r.y, 0.0, 1.0), 0.45)) * cs;
   float depth = 0.5 + 0.5 * tn(p / 900.0);
   vec3 deep = mix(vec3(0.05, 0.13, 0.15), vec3(0.03, 0.08, 0.12), depth) * (uAmb * 1.6 + uSunCol * 0.35);
   deep += vec3(0.03, 0.07, 0.05) * (uAmb + uSunCol * 0.3) * smoothstep(0.55, 0.8, tn(p / 90.0));   // murky green patches
   vec3 c = mix(deep, sky, fres);
   float sg = max(dot(r, uSunDir), 0.0);
-  c += uSunCol * (pow(sg, 400.0) * 4.0 + pow(sg, 40.0) * 0.18) * cloudShadow(vW);
+  c += uSunCol * (pow(sg, 400.0) * 4.0 + pow(sg, 40.0) * 0.18) * cs;
   // whitecaps on the steeper crests when it is blowing
   float foam = smoothstep(0.55, 0.9, length(gr) * 0.9) * lodw(2.0, fp);
   c = mix(c, vec3(0.8, 0.85, 0.88) * (uAmb + uSunCol * 0.5), foam * 0.25);
@@ -23492,10 +23700,11 @@ void main() {
   }
   vec3 n = vec3(0.0, 1.0, 0.0);
   vec3 vd = normalize(uEye - vW);
-  vec3 col = lit(c, n, vW);
+  float cs = cloudShadow(vW);
+  vec3 col = lit(c, n, vW, cs);
   float fres = pow(1.0 - max(vd.y, 0.0), 5.0);
   // dry sheen: a low sun glints off the polished surface
-  col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 40.0) * (0.03 + 0.1 * gloss) * cloudShadow(vW) * (kind == 8 ? 0.2 : 1.0);
+  col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 40.0) * (0.03 + 0.1 * gloss) * cs * (kind == 8 ? 0.2 : 1.0);
   if (uWet > 0.0) {         // wet pavement: darker and more saturated; small dark puddles with a Fresnel sky mirror
     float lum = dot(col, vec3(0.3, 0.59, 0.11));
     vec3 dry = col;
@@ -23525,7 +23734,8 @@ void main() {
   int fl = int(iB.w + 0.5);
   vec3 sc = iC;
   if ((fl & 1) != 0) { float d = length(iA.xyz - uEye); sc *= max(1.0, d * uMinPx / max(iC.x, 1e-6)); }
-  mat3 R = rotY(-iA.w) * rotX(iB.x) * rotZ(iB.y);
+  mat3 R = rotY(-iA.w);
+  if (iB.x != 0.0 || iB.y != 0.0) R = R * rotX(iB.x) * rotZ(iB.y);   // per instance; static scenery has neither
   vec3 w = iA.xyz + R * (aP * sc);
   if (uShadow > 0.5) { // flatten onto the ground along the sun direction
     float g = iA.y - ((fl & 2) != 0 ? float(fl >> 2) * 0.001 * iC.y : 0.0);
@@ -23570,8 +23780,9 @@ void main() {
     alb = mix(alb, vec3(0.1, 0.11, 0.13), win * 0.7);
     emis += vec3(1.0, 0.75, 0.45) * win * step(0.7, h21(floor(cell) + floor(vW.xz * 5000.0))) * uNight * 0.8;
   } else if (mat == 5 || mat == 1) spec = 0.25;
-  vec3 col = lit(alb, n, vW) + emis;
-  if (spec > 0.0) col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 60.0) * spec * cloudShadow(vW);
+  float cs = cloudShadow(vW);
+  vec3 col = lit(alb, n, vW, cs) + emis;
+  if (spec > 0.0) col += uSunCol * pow(max(dot(reflect(-vd, n), uSunDir), 0.0), 60.0) * spec * cs;
   col += vec3(1.0, 0.82, 0.25) * vSel * 0.3;
   o = vec4(fog(col, vW), 1.0);
 }`;
@@ -23603,8 +23814,9 @@ void main() {
   float d = length(aP.xyz - uEye);
   gl_Position = uVP * vec4(aP.xyz, 1.0);
   float px = aP.w / 6076.12 / max(d, 0.01) * uPx;
-  gl_PointSize = a <= 0.001 ? 0.0 : clamp(px * (1.0 + uNight * 1.5) + 1.5, 1.5, 16.0) * uDpr;
-  vC = vec4(aC.rgb, a * exp(-uFog * d * 0.55));
+  float fa = a * exp(-uFog * d * 0.55);
+  gl_PointSize = fa <= 0.001 ? 0.0 : clamp(px * (1.0 + uNight * 1.5) + 1.5, 1.5, 16.0) * uDpr;
+  vC = vec4(aC.rgb, fa);
 }`;
 const LIGHT_FS = `#version 300 es
 precision highp float;
@@ -23621,9 +23833,11 @@ in vec3 vW; out vec4 o;
 uniform vec3 uCloudCol;
 ${NOISE}${COMMON}
 void main() {
-  float a = cloudAt(vW.xz, uCover, uTime);
-  float n = fbm(vW.xz * 0.9 + 3.0);
   float d = length(vW - uEye);
+  if (d >= 70.0) discard;                       // faded out completely: nothing to draw
+  float a = cloudAt(vW.xz, uCover, uTime);
+  if (a <= 0.0) discard;
+  float n = fbm(vW.xz * 0.9 + 3.0);
   a *= smoothstep(70.0, 25.0, d);
   vec3 c = uCloudCol * (0.7 + 0.4 * n);
   o = vec4(mix(uFogCol, c, exp(-uFog * d * 0.4)), a * 0.92);
@@ -23721,14 +23935,19 @@ class Tower {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
-    this.meshes = {};
+    this.meshes = {}; this.meshList = [];   // meshList: the same meshes in a persistent array (no per-frame Object.values)
     const lib = meshLibrary();
-    for (const [k, m] of Object.entries(lib)) if (!k.endsWith('_LO')) this.meshes[k] = this.makeMesh(m, lib[k + '_LO']);
+    for (const [k, m] of Object.entries(lib)) if (!k.endsWith('_LO')) this.addMesh(k, this.makeMesh(m, lib[k + '_LO']));
     this.lightS = this.makeLights(); this.lightD = this.makeLights();
     this.dynLights = new Float32Array(12 * 4096); this.nDyn = 0;
+    // the dynamic light buffer is allocated once at capacity and refilled with bufferSubData
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.lightD.buf); gl.bufferData(gl.ARRAY_BUFFER, this.dynLights.byteLength, gl.DYNAMIC_DRAW);
   }
 
   // ---------- GL resources ----------
+  addMesh(k, m) { m.key = k; m.noShadow = k === 'TREE_C' || k === 'TREE_D' || k === 'POLE'; this.meshes[k] = m; this.meshList.push(m); return m; }
+  // bounding radius of a unit mesh about its origin (used for conservative culling of static instance cells)
+  static radiusOf(P) { let r = 0; for (let i = 0; i < P.length; i += 3) { const d = P[i] * P[i] + P[i + 1] * P[i + 1] + P[i + 2] * P[i + 2]; if (d > r) r = d; } return Math.sqrt(r); }
   makeMesh(m, lo) {
     const gl = this.gl;
     const vb = [m.P, m.N, m.C].map(a => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW); return b; });
@@ -23742,7 +23961,8 @@ class Tower {
       return { vao, ib };
     };
     const s = mk(), d = mk();
-    return { n: m.n, vaoS: s.vao, ibS: s.ib, vaoD: d.vao, ibD: d.ib, nS: 0, nearS: 0, data: new Float32Array(STRIDE * 64), count: 0, ground: 0,
+    return { n: m.n, vb, rad: Math.max(Tower.radiusOf(m.P), lo ? Tower.radiusOf(lo.P) : 0), vaoS: s.vao, ibS: s.ib, vaoD: d.vao, ibD: d.ib, capD: 0, nS: 0, nearS: 0, rNear: [], rFar: [], rVaos: [],
+      data: new Float32Array(STRIDE * 64), count: 0, ground: 0,
       lo: lo ? { n: lo.n, vb: [lo.P, lo.N, lo.C].map(a => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW); return b; }), vao: gl.createVertexArray() } : null };
   }
   // static instances are stored near-first: the HD mesh draws the first nearS, the low-detail twin the rest (attribute offset stands in for a base instance)
@@ -23754,6 +23974,81 @@ class Tower {
     const st = STRIDE * 4, base = m.nearS * st;
     [[3, 4, 0], [4, 4, 16], [5, 3, 32], [6, 3, 44], [7, 3, 56]].forEach(([loc, n, off]) => { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, st, base + off); gl.vertexAttribDivisor(loc, 1); });
     gl.bindVertexArray(null);
+  }
+  // Static instances are stored near-first (HD block, then the low-detail block). Within each block they are sorted into
+  // spatial cells so that cells wholly outside the view frustum can be skipped (they cost vertex work for nothing): each
+  // range is a run of instances with a bounding box; drawn through a VAO whose attribute offset stands in for a base instance.
+  rangeVao(vb, ib, first) {
+    const gl = this.gl, vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    [[0, 3], [1, 3], [2, 4]].forEach(([loc, n], i) => { gl.bindBuffer(gl.ARRAY_BUFFER, vb[i]); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, ib);
+    const st = STRIDE * 4, base = first * st;
+    [[3, 4, 0], [4, 4, 16], [5, 3, 32], [6, 3, 44], [7, 3, 56]].forEach(([loc, n, off]) => { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, st, base + off); gl.vertexAttribDivisor(loc, 1); });
+    gl.bindVertexArray(null);
+    return vao;
+  }
+  buildRanges(m, st) {
+    const gl = this.gl;
+    for (const v of m.rVaos) gl.deleteVertexArray(v);
+    m.rVaos = []; m.rNear = []; m.rFar = [];
+    if (!st || !st.count) { gl.bindBuffer(gl.ARRAY_BUFFER, m.ibS); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(STRIDE), gl.STATIC_DRAW); return; }
+    const src = st.data, out = new Float32Array(src.length), rad = m.rad;
+    // block [a, b) drawn with a mesh of nv vertices: sort into cells of cs nm when the block is heavy enough to be worth culling
+    const block = (a, b, cs, nv, vb) => {
+      const cnt = b - a, ranges = [];
+      if (cnt <= 0) return ranges;
+      const mk = (first, count, cull, bb) => {
+        const vao = this.rangeVao(vb, m.ibS, first); m.rVaos.push(vao);
+        const r = { first, count, vao, n: nv, cull, x0: 0, x1: 0, y0: 0, y1: 0, z0: 0, z1: 0 };
+        if (bb) Object.assign(r, bb);
+        ranges.push(r);
+      };
+      if (cnt * nv < 20000) { out.set(src.subarray(a * STRIDE, b * STRIDE), a * STRIDE); mk(a, cnt, false); return ranges; }
+      const idx = new Array(cnt), key = new Float64Array(cnt);
+      for (let i = 0; i < cnt; i++) { idx[i] = i; const o = (a + i) * STRIDE; key[i] = (Math.floor(src[o] / cs) + 2048) * 4096 + Math.floor(src[o + 2] / cs) + 2048; }
+      idx.sort((p, q) => key[p] - key[q]);
+      let i = 0;
+      while (i < cnt) {
+        let j = i; while (j < cnt && key[idx[j]] === key[idx[i]]) j++;
+        const bb = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 };
+        for (let q = i; q < j; q++) {
+          const o = (a + idx[q]) * STRIDE, r = rad * Math.max(src[o + 8], src[o + 9], src[o + 10]);
+          out.set(src.subarray(o, o + STRIDE), (a + q) * STRIDE);
+          bb.x0 = Math.min(bb.x0, src[o] - r); bb.x1 = Math.max(bb.x1, src[o] + r);
+          bb.y0 = Math.min(bb.y0, src[o + 1] - r); bb.y1 = Math.max(bb.y1, src[o + 1] + r);
+          bb.z0 = Math.min(bb.z0, src[o + 2] - r); bb.z1 = Math.max(bb.z1, src[o + 2] + r);
+        }
+        mk(a + i, j - i, true, bb);
+        i = j;
+      }
+      return ranges;
+    };
+    m.rNear = block(0, st.near, 0.4, m.n, m.vb);
+    m.rFar = block(st.near, st.count, 2, m.lo ? m.lo.n : m.n, m.lo ? m.lo.vb : m.vb);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.ibS); gl.bufferData(gl.ARRAY_BUFFER, out, gl.STATIC_DRAW);
+  }
+  // is a range's bounding box (grown horizontally by pad) at least partly inside the view frustum, with a margin for the
+  // minimum-pixel-size inflation of small instances?
+  rangeVisible(rg, pad) {
+    if (!rg.cull) return true;
+    const M = this.vp, K = 1.2;
+    let all = 63;
+    for (let c = 0; c < 8; c++) {
+      const x = c & 1 ? rg.x1 + pad : rg.x0 - pad, y = c & 2 ? rg.y1 : rg.y0, z = c & 4 ? rg.z1 + pad : rg.z0 - pad;
+      const cx = M[0] * x + M[4] * y + M[8] * z + M[12], cy = M[1] * x + M[5] * y + M[9] * z + M[13];
+      const cz = M[2] * x + M[6] * y + M[10] * z + M[14], cw = M[3] * x + M[7] * y + M[11] * z + M[15];
+      let b = 0;
+      if (cx < -cw * K) b |= 1; if (cx > cw * K) b |= 2; if (cy < -cw * K) b |= 4; if (cy > cw * K) b |= 8; if (cz < -cw) b |= 16; if (cz > cw) b |= 32;
+      all &= b; if (!all) return true;
+    }
+    return false;
+  }
+  drawRanges(ranges, shadowK) {
+    const gl = this.gl;
+    for (const rg of ranges) {
+      if (rg.cull && !this.rangeVisible(rg, shadowK ? (rg.y1 - rg.y0) * shadowK : 0)) continue;
+      gl.bindVertexArray(rg.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, rg.n, rg.count);
+    }
   }
   makeLights() {
     const gl = this.gl, vao = gl.createVertexArray(); gl.bindVertexArray(vao);
@@ -23855,11 +24150,10 @@ class Tower {
     this.nStrips = Math.min(3, S.frames.length);
     // static instances
     for (const k of Object.keys(S.instances)) this.ensureMesh(k);
-    for (const [k, m] of Object.entries(this.meshes)) {
-      const st = S.instances[k];
+    for (const m of this.meshList) {
+      const st = S.instances[m.key];
       m.nS = st ? st.count : 0; m.nearS = st ? st.near : 0;
-      gl.bindBuffer(gl.ARRAY_BUFFER, m.ibS); gl.bufferData(gl.ARRAY_BUFFER, st ? st.data : new Float32Array(STRIDE), gl.STATIC_DRAW);
-      this.bindLod(m);
+      this.buildRanges(m, st);
     }
     // static lights
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lightS.buf); gl.bufferData(gl.ARRAY_BUFFER, S.lights, gl.STATIC_DRAW);
@@ -23896,13 +24190,17 @@ class Tower {
     this.syncBar();
   }
 
+  // The backing store is capped (P2): effective DPR <= MAX_DPR and at most MAX_PIXELS in total. The tower fragment
+  // shaders are heavy, so fill rate rather than sharpness is the limit; the 2D overlay keeps its own full-DPR canvas.
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(2, Math.round(r.width)), h = Math.max(2, Math.round(r.height));
-    if (w === this.w && h === this.h && dpr === this.dpr) return;
-    this.w = w; this.h = h; this.dpr = dpr;
-    this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
+    let dpr = Math.min(MAX_DPR, window.devicePixelRatio || 1);
+    dpr = Math.min(dpr, Math.sqrt(MAX_PIXELS / (w * h)));
+    const bw = Math.max(2, Math.round(w * dpr)), bh = Math.max(2, Math.round(h * dpr));
+    if (w === this.w && h === this.h && bw === this.canvas.width && bh === this.canvas.height) return;
+    this.w = w; this.h = h; this.dpr = bw / w;
+    this.canvas.width = bw; this.canvas.height = bh;
   }
 
   // ---------- lighting from the sim clock & weather ----------
@@ -24094,7 +24392,7 @@ class Tower {
     if (this.meshes[k]) return this.meshes[k];
     const r = /^M_([A-Z0-9]+)(_G)?$/.exec(k), mod = r && HD[r[1]];
     if (!mod || (r[2] && !mod.gear)) return null;
-    return (this.meshes[k] = this.makeMesh(r[2] ? mod.gear() : mod.body()));
+    return this.addMesh(k, this.makeMesh(r[2] ? mod.gear() : mod.body()));
   }
   // shadows are drawn for the first `ground` dynamic instances of a mesh
   markGround(g) {
@@ -24203,7 +24501,7 @@ class Tower {
     const minPx = 2 * Math.tan(fov / 2) / H * (top ? 30 : 7) * this.dpr;
 
     // ----- dynamic instances and lights -----
-    for (const m of Object.values(this.meshes)) { m.count = 0; m.ground = 0; }
+    for (const m of this.meshList) { m.count = 0; m.ground = 0; }
     this.nDyn = 0;
     this.screen.clear();
     const arrEnd = world.runwayConfig.arr, depEnd = world.runwayConfig.dep;
@@ -24352,7 +24650,11 @@ class Tower {
     gl.bindVertexArray(this.paveVao); gl.drawArrays(gl.TRIANGLES, 0, this.paveN);
     gl.disable(gl.POLYGON_OFFSET_FILL);
     // upload dynamic instances
-    for (const m of Object.values(this.meshes)) if (m.count) { gl.bindBuffer(gl.ARRAY_BUFFER, m.ibD); gl.bufferData(gl.ARRAY_BUFFER, m.data.subarray(0, m.count * STRIDE), gl.DYNAMIC_DRAW); }
+    for (const m of this.meshList) if (m.count) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, m.ibD);
+      if (m.data.byteLength > m.capD) { m.capD = m.data.byteLength; gl.bufferData(gl.ARRAY_BUFFER, m.capD, gl.DYNAMIC_DRAW); }   // grow only; refill in place
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, m.data, 0, m.count * STRIDE);
+    }
     // planar shadows (near props and ground aircraft), stencilled so overlaps don't double up
     const sunEl = Math.asin(clamp(E.sunDir[1], -1, 1)) / DEG;
     if (sunEl > 8) {
@@ -24362,9 +24664,10 @@ class Tower {
       gl.uniform1f(p.u.uShadowA, 0.38 * E.day * (1 - clamp((E.cover - 0.5) * 2, 0, 0.8)));
       gl.enable(gl.STENCIL_TEST); gl.stencilFunc(gl.EQUAL, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
       gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-3, -6);
-      for (const [k, m] of Object.entries(this.meshes)) {
-        if (k === 'TREE_C' || k === 'TREE_D' || k === 'POLE') continue;
-        if (m.nearS) { gl.bindVertexArray(m.vaoS); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.nearS); }
+      const shK = 1 / Math.max(E.sunDir[1], 0.1);   // a shadow reaches up to height / sin(sun elevation) from its caster
+      for (const m of this.meshList) {
+        if (m.noShadow) continue;
+        if (m.nearS) this.drawRanges(m.rNear, shK);
         if (m.ground) { gl.bindVertexArray(m.vaoD); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.ground); }
       }
       gl.disable(gl.POLYGON_OFFSET_FILL); gl.disable(gl.STENCIL_TEST);
@@ -24373,11 +24676,8 @@ class Tower {
     // meshes
     p = this.p.mesh; gl.useProgram(p.p); common(p);
     gl.uniform1f(p.u.uMinPx, minPx); gl.uniform1f(p.u.uShadow, 0); gl.uniform3fv(p.u.uShadowDir, E.sunDir);
-    for (const m of Object.values(this.meshes)) {
-      if (m.lo) {
-        if (m.nearS) { gl.bindVertexArray(m.vaoS); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.nearS); }
-        if (m.nS > m.nearS) { gl.bindVertexArray(m.lo.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.lo.n, m.nS - m.nearS); }
-      } else if (m.nS) { gl.bindVertexArray(m.vaoS); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.nS); }
+    for (const m of this.meshList) {
+      if (m.nS) { this.drawRanges(m.rNear, 0); this.drawRanges(m.rFar, 0); }
       if (m.count) { gl.bindVertexArray(m.vaoD); gl.drawArraysInstanced(gl.TRIANGLES, 0, m.n, m.count); }
     }
     // cloud deck
@@ -24396,7 +24696,7 @@ class Tower {
     gl.uniform1i(p.u.uActive, active); gl.uniform1i(p.u.uStopOff, stopOff);
     gl.bindVertexArray(this.lightS.vao); gl.drawArrays(gl.POINTS, 0, this.lightS.n);
     if (this.nDyn) {
-      gl.bindVertexArray(this.lightD.vao); gl.bindBuffer(gl.ARRAY_BUFFER, this.lightD.buf); gl.bufferData(gl.ARRAY_BUFFER, this.dynLights.subarray(0, this.nDyn * 12), gl.DYNAMIC_DRAW);
+      gl.bindVertexArray(this.lightD.vao); gl.bindBuffer(gl.ARRAY_BUFFER, this.lightD.buf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.dynLights, 0, this.nDyn * 12);
       gl.drawArrays(gl.POINTS, 0, this.nDyn);
     }
     gl.depthMask(true);
