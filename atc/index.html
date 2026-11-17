@@ -1276,8 +1276,11 @@ class Weather {
     return { head: this.spd * Math.cos(d), cross: Math.abs(this.spd * Math.sin(d)), gHead: Math.max(this.spd, this.gust) * Math.cos(d) };
   }
   metar(ap, t) {
-    const d = new Date(t * 1000);
-    const dd = String(d.getUTCDate()).padStart(2, '0'), hh = String(d.getUTCHours()).padStart(2, '0'), mm = d.getUTCMinutes() < 20 ? '20' : '50';
+    // observation = the most recent :20 / :50 at or before the sim clock (never in the future)
+    const mins = Math.floor(t / 60), m60 = ((mins % 60) + 60) % 60;
+    const obs = mins - (m60 >= 50 ? m60 - 50 : m60 >= 20 ? m60 - 20 : m60 + 10);
+    const d = new Date(obs * 60000);
+    const dd = String(d.getUTCDate()).padStart(2, '0'), hh = String(d.getUTCHours()).padStart(2, '0'), mm = String(d.getUTCMinutes()).padStart(2, '0');
     const s = this.snapshot();
     const wind = s.spd < 1 ? '00000KT' : `${String(s.dir || 360).padStart(3, '0')}${String(s.spd).padStart(2, '0')}${s.gust > s.spd + 9 ? 'G' + s.gust : ''}KT`;
     const vis = this.vis >= 9999 ? '9999' : String(this.vis).padStart(4, '0');
@@ -1327,13 +1330,128 @@ function machToTas(M, alt) { return M * isa(alt).a; }
 
 return { isa, casToMach, machToCas, casToTas, machToTas };
 });
+__def("js/sim/phrase.js", function () {
+// Radiotelephony phraseology helpers: spoken digits, callsigns, levels, readbacks.
+const DIG = ['zero', 'one', 'two', 'three', 'four', 'fife', 'six', 'seven', 'eight', 'niner'];
+const ALPHA = { A: 'Alpha', B: 'Bravo', C: 'Charlie', D: 'Delta', E: 'Echo', F: 'Foxtrot', G: 'Golf', H: 'Hotel', I: 'India', J: 'Juliet', K: 'Kilo', L: 'Lima', M: 'Mike', N: 'November', O: 'Oscar', P: 'Papa', Q: 'Quebec', R: 'Romeo', S: 'Sierra', T: 'Tango', U: 'Uniform', V: 'Victor', W: 'Whiskey', X: 'X-ray', Y: 'Yankee', Z: 'Zulu' };
+
+function digits(s) { return String(s).split('').map(c => (c >= '0' && c <= '9' ? DIG[+c] : ALPHA[c] || c)).join(' '); }
+function letter(c) { return ALPHA[c] || c; }
+
+function spokenCallsign(ac, short = false) {
+  if (ac.ga) {
+    const reg = ac.callsign; // e.g. GABCD
+    return short ? `${letter(reg[0])} ${digits(reg.slice(-2))}` : digits(reg);
+  }
+  return `${ac.rt} ${digits(ac.callsign.slice(ac.op.length))}`;
+}
+
+function spokenAlt(alt, ta) {
+  if (alt > ta) return `flight level ${digits(String(Math.round(alt / 100)).padStart(3, '0'))}`;
+  const th = Math.floor(alt / 1000), h = Math.round((alt % 1000) / 100);
+  return `altitude ${th ? digits(th) + ' thousand' : ''}${h ? ' ' + digits(h) + ' hundred' : ''} feet`.replace(/\s+/g, ' ');
+}
+function fmtAlt(alt, ta) { return alt > ta ? 'FL' + String(Math.round(alt / 100)).padStart(3, '0') : Math.round(alt) + 'ft'; }
+
+function spokenHdg(h) { return `heading ${digits(String(Math.round(h) || 360).padStart(3, '0'))}`; }
+function spokenFreq(f) { const [a, b = ''] = String(f).split('.'); const d = b.replace(/0+$/, ''); return `${digits(a)}${d ? ' decimal ' + digits(d) : ''}`; }
+function spokenUnit(u) { return u.replace(/\bCTR\b/i, 'control').replace(/\bAPP\b/i, 'approach').replace(/\bTWR\b/i, 'tower').toLowerCase(); }
+function spokenRwy(r) { return `runway ${digits(r.replace(/[LRC]/, ''))}${/L/.test(r) ? ' left' : /R/.test(r) ? ' right' : /C/.test(r) ? ' centre' : ''}`; }
+
+// Build readback text (display) and speech (spoken) for an applied command list.
+function readback(ac, cmds, ap, qnh) {
+  const disp = [], say = [];
+  for (const c of cmds) {
+    switch (c.t) {
+      case 'HDG': {
+        const h = String(c.v).padStart(3, '0');
+        disp.push(`${c.dir === 'L' ? 'left ' : c.dir === 'R' ? 'right ' : ''}heading ${h}`);
+        say.push(`${c.dir === 'L' ? 'turn left ' : c.dir === 'R' ? 'turn right ' : ''}${spokenHdg(c.v)}`);
+        break;
+      }
+      case 'TURN': disp.push(`turn ${c.deg}° ${c.dir === 'L' ? 'left' : 'right'}`); say.push(`turning ${digits(c.deg)} degrees ${c.dir === 'L' ? 'left' : 'right'}`); break;
+      case 'ALT': {
+        const verb = c.v > ac.alt + 50 ? 'climb' : c.v < ac.alt - 50 ? 'descend' : 'maintain';
+        disp.push(`${verb} ${fmtAlt(c.v, ap.ta)}${c.v <= ap.ta && verb === 'descend' ? ' QNH ' + qnh : ''}`);
+        say.push(`${verb} ${spokenAlt(c.v, ap.ta)}${c.v <= ap.ta && ac.alt > ap.ta ? ', QNH ' + digits(qnh) : ''}`);
+        break;
+      }
+      case 'SPD': disp.push(`speed ${c.v}`); say.push(`speed ${digits(c.v)} knots`); break;
+      case 'MACH': {
+        const m = c.v.toFixed(2), [w, fr] = m.split('.');
+        disp.push(`Mach ${m}`); say.push(`Mach ${w === '0' ? '' : digits(w) + ' '}point ${digits(fr.replace(/0$/, '') || '0')}`); break;
+      }
+      case 'SN': disp.push('normal speed'); say.push('resume normal speed'); break;
+      case 'DCT': disp.push(`direct ${c.fix}`); say.push(`direct ${c.fix.toLowerCase()}`); break;
+      case 'PATH':
+        if (c.rwy) { disp.push(`drawn track, ILS ${c.rwy}, cleared to land`); say.push(`vectors ILS ${spokenRwy(c.rwy)}, cleared to land`); }
+        else if (c.fix) { disp.push(`drawn track to ${c.fix}`); say.push(`routing as cleared to ${c.fix.toLowerCase()}`); }
+        else { disp.push('drawn track'); say.push('routing as cleared'); }
+        break;
+      case 'HOLD': disp.push(`hold at ${c.fix}`); say.push(`hold at ${c.fix.toLowerCase()}`); break;
+      case 'ILS': disp.push(`cleared ILS ${c.rwy}`); say.push(`cleared ILS approach ${spokenRwy(c.rwy)}`); break;
+      case 'EXP': disp.push(`expect ILS ${c.rwy}`); say.push(`expect ILS ${spokenRwy(c.rwy)}`); break;
+      case 'CL': disp.push(`cleared to land ${c.rwy || ''}`.trim()); say.push(`cleared to land${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
+      case 'GA': disp.push('going around'); say.push('going around'); break;
+      case 'LU': disp.push(`line up and wait ${c.rwy || ''}`.trim()); say.push(`line up and wait${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
+      case 'TO': disp.push(`cleared for take-off ${c.rwy || ''}`.trim()); say.push(`cleared for take-off${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
+      case 'RES': disp.push('resuming own navigation'); say.push('resuming own navigation'); break;
+      case 'SQK': disp.push(`squawk ${c.code}`); say.push(`squawk ${digits(c.code)}`); break;
+      case 'ID': disp.push('squawk ident'); say.push('ident'); break;
+      case 'HO': disp.push(`${c.unit} ${c.freq}`); say.push(`${spokenUnit(c.unit)} ${spokenFreq(c.freq)}, good day`); break;
+      default: break;
+    }
+  }
+  const cs = spokenCallsign(ac, true);
+  return { text: disp.join(', '), speech: say.join(', ') + ', ' + cs };
+}
+
+// Controller phrasing for an instruction (used when the instructor transmits for you). Callsign first, as on
+// the real frequency; levels and headings in the same form the pilot reads back.
+function instruction(ac, cmds, ap, qnh) {
+  const say = [];
+  for (const c of cmds) {
+    switch (c.t) {
+      case 'HDG': say.push(`${c.dir === 'L' ? 'turn left ' : c.dir === 'R' ? 'turn right ' : 'fly '}${spokenHdg(c.v)}`); break;
+      case 'TURN': say.push(`turn ${c.dir === 'L' ? 'left' : 'right'} ${digits(c.deg)} degrees`); break;
+      case 'ALT': {
+        const verb = c.v > ac.alt + 50 ? 'climb' : c.v < ac.alt - 50 ? 'descend' : 'maintain';
+        say.push(`${verb} ${spokenAlt(c.v, ap.ta)}${c.v <= ap.ta && ac.alt > ap.ta && qnh ? ', QNH ' + digits(qnh) : ''}`);
+        break;
+      }
+      case 'SPD': say.push(`speed ${digits(c.v)} knots`); break;
+      case 'MACH': { const [w, fr] = c.v.toFixed(2).split('.'); say.push(`Mach ${w === '0' ? '' : digits(w) + ' '}point ${digits(fr.replace(/0$/, '') || '0')}`); break; }
+      case 'SN': say.push('resume normal speed'); break;
+      case 'DCT': say.push(`proceed direct ${c.fix.toLowerCase()}`); break;
+      case 'PATH': say.push(c.rwy ? `vectors for the ILS ${spokenRwy(c.rwy)}, cleared to land` : c.fix ? `route as cleared to ${c.fix.toLowerCase()}` : 'route as cleared'); break;
+      case 'HOLD': say.push(`hold at ${c.fix.toLowerCase()}, as published`); break;
+      case 'ILS': say.push(`cleared ILS approach ${spokenRwy(c.rwy || ac.app?.rwy || '')}`); break;
+      case 'EXP': say.push(`expect ILS approach ${spokenRwy(c.rwy)}`); break;
+      case 'CL': { const r = c.rwy || ac.app?.rwy; say.push(`${r ? spokenRwy(r) + ', ' : ''}cleared to land`); break; }
+      case 'GA': say.push('go around, I say again, go around'); break;
+      case 'LU': say.push(`line up and wait${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
+      case 'TO': say.push(`${c.rwy ? spokenRwy(c.rwy) + ', ' : ''}cleared for take-off`); break;
+      case 'RES': say.push('resume own navigation'); break;
+      case 'SQK': say.push(`squawk ${digits(c.code)}`); break;
+      case 'ID': say.push('squawk ident'); break;
+      case 'HO': if (c.unit) say.push(`contact ${spokenUnit(c.unit)} ${spokenFreq(c.freq)}`); break;
+      default: break;
+    }
+  }
+  return say.length ? `${spokenCallsign(ac)}, ${say.join(', ')}` : '';
+}
+
+return { digits, letter, spokenCallsign, spokenAlt, fmtAlt, spokenHdg, spokenFreq, spokenUnit, spokenRwy, readback, instruction };
+});
 __def("js/sim/aircraft.js", function () {
 // Aircraft flight model + pilot. One instance per flight; stepped at the world's fixed timestep.
 const { AIRCRAFT_TYPES } = __m("js/data/aircraft.js");
 const { casToTas, casToMach, machToCas } = __m("js/core/atmos.js");
 const { mvaAt } = __m("js/sim/airport.js");
+const { spokenCallsign, spokenRwy } = __m("js/sim/phrase.js");
 const { DEG, FT_PER_NM, angleDiff, bearing, clamp, dist, hdgVec, lerp, norm360, trackErrors } = __m("js/core/geo.js");
 const ROLL_ACCEL = 1.4;   // deg/s² change in turn rate (roll-in lag)
+const MAX_INTERCEPT = 45; // deg: widest localiser intercept angle (track vs final approach track) the pilot will accept
 const VS_ACCEL = 450;     // fpm per second change in vertical speed
 
 class Aircraft {
@@ -1541,13 +1659,22 @@ class Aircraft {
     // ILS localiser capture/track overrides lateral modes once captured
     if (this.app) {
       const e = this.app.end;
+      if (!e.ils || e.ils.status !== 'OK') {
+        // localiser/glidepath unserviceable (failed after the clearance was given, or armed by an unvalidated path): never capture or keep tracking it
+        if (this.app.state === 'ARMED') {
+          const rwy = this.app.rwy;
+          this.app = null; this.clr.landing = false; this.clr.hdg = this.hdg; this.clr.turnDir = null; this.nav.mode = 'HDG';
+          this.world.pilotSay(this, `unable ILS ${rwy}, localiser unserviceable`, `${spokenCallsign(this, true)}, unable ILS ${spokenRwy(rwy)}, localiser unserviceable, request vectors`, { level: 'warn' });
+        } else this.goAround('ILS failure');
+        if (!this.app) return this.lateral(dt);  // (an unpowered glider cannot go around: it keeps its approach)
+      }
       const te = trackErrors(this.x, this.y, e.thrX, e.thrY, e.hdg);
       if (this.app.state === 'ARMED' && !this.app.viaIF) {
         const trackDiff = Math.abs(angleDiff(this.track, e.hdg));
         const lead = this.turnRadius() * (1 - Math.cos(Math.min(trackDiff, 90) * DEG)) + 0.15;
         const ahead = te.along < -0.5 && -te.along < e.ils.locRange;
         const inCone = Math.abs(te.cross) < Math.tan(35 * DEG) * -te.along + 0.5;
-        const converging = trackDiff < 100 && (Math.sign(te.cross) !== Math.sign(angleDiff(e.hdg, this.track)) || Math.abs(te.cross) < 0.3);
+        const converging = trackDiff <= MAX_INTERCEPT && (Math.sign(te.cross) !== Math.sign(angleDiff(e.hdg, this.track)) || Math.abs(te.cross) < 0.3);
         if (ahead && inCone && converging && Math.abs(te.cross) <= lead) { this.app.state = 'LOC'; this.nav.mode = 'APP'; this.world.onEvent(this, 'LOC'); }
       }
       if (this.app.state === 'LOC' || this.app.state === 'GS') {
@@ -1668,7 +1795,8 @@ class Aircraft {
         return this.steerToFix(f.x, f.y);
       case 'OUTBOUND_TURN': {
         const remaining = h.turn === 'R' ? norm360(out - this.hdg) : norm360(this.hdg - out);
-        if (remaining < 5 || remaining > 355) { this.nav.holdState = 'OUTBOUND'; this.nav.holdT = 0; }
+        // done when within 5 deg, or when already past the outbound heading (remaining wraps to near 360): never turn on round again
+        if (remaining < 5 || remaining > 270) { this.nav.holdState = 'OUTBOUND'; this.nav.holdT = 0; }
         return norm360(this.hdg + (h.turn === 'R' ? 1 : -1) * Math.min(remaining, 60));
       }
       case 'OUTBOUND':
@@ -1853,7 +1981,12 @@ function makeSquawk(rng, used) {
     const s = '4' + [0, 0, 0].map(() => rng.int(0, 7)).join('');
     if (!used.has(s) && !['7500', '7600', '7700', '7000'].includes(s)) { used.add(s); return s; }
   }
-  return '4' + rng.int(100, 777);
+  // pool nearly exhausted: take any unused code in 4000-4777 (octal digits only), else reuse a valid one
+  for (let n = 0; n < 512; n++) {
+    const s = '4' + n.toString(8).padStart(3, '0');
+    if (!used.has(s)) { used.add(s); return s; }
+  }
+  return '4' + rng.int(0, 7) + rng.int(0, 7) + rng.int(0, 7);
 }
 
 // Position just outside the first fix of a route, pointing at the next fix.
@@ -1890,10 +2023,11 @@ function arrivalSpec(world, opts = {}) {
   let alt = opts.alt ?? (perf.cls === 'GA' ? rng.pick([4000, 5000, 6000]) : star.entryAlt + rng.int(-1, 1) * 1000);
   if (perf.cls === 'GA' && opts.alt == null) alt = Math.max(alt, routeMva(ap, g, star.route));
   if (perf.cls === 'TP') alt = Math.min(alt, 13000);
+  const cap = perf.cls === 'TP' ? Math.min(13000, perf.ceiling) : perf.ceiling;
   alt = Math.min(alt, perf.ceiling);
   if (!opts.force) {
     let tries = 0;
-    while (!clearAt(world, g.x, g.y, alt) && tries++ < 4) alt += 2000;
+    while (!clearAt(world, g.x, g.y, alt) && tries++ < 4 && alt + 2000 <= cap) alt += 2000;  // retry higher, never above the type's ceiling
     if (!clearAt(world, g.x, g.y, alt)) return null;
   }
   const ias = Math.min(perf.vmax, perf.cls === 'GA' ? perf.vcruise : alt < 10000 ? 250 : star.entrySpd);
@@ -1934,7 +2068,7 @@ function overflightSpec(world, opts = {}) {
   // semicircular-ish: eastbound odd, westbound even
   const east = g.hdg < 180;
   const fl = Math.round(alt / 1000);
-  if (!opts.alt && (fl % 2 === 1) !== east) alt += 1000;
+  if (!opts.alt && (fl % 2 === 1) !== east) alt += alt + 1000 <= perf.ceiling ? 1000 : -1000;
   if (alt > ap.ceiling && !high) alt -= 2000;
   if (!opts.force && !clearAt(world, g.x, g.y, alt)) return null;
   return { kind: 'OVR', op, type, x: g.x, y: g.y, hdg: g.hdg, alt, ias: Math.min(perf.vmax, perf.vcruise), route, routeName: route[0] + '-' + route[route.length - 1],
@@ -1987,9 +2121,10 @@ function predictAlt(a, t) {
   return a.vs > 0 ? Math.min(p, Math.max(target, a.alt)) : Math.max(p, Math.min(target, a.alt));
 }
 
-function towerPair(a, b, ap) {
-  // aircraft both very low near the field are tower-separated (landing / departing traffic)
-  const low = x => x.alt - ap.elev < 1500 && Math.hypot(x.x, x.y) < 5;
+function towerPair(a, b, ap, now) {
+  // aircraft both very low near the field are tower-separated (landing / departing traffic); an aircraft flying a
+  // missed approach is back under radar control, so it never gets the exemption
+  const low = x => x.alt - ap.elev < 1500 && Math.hypot(x.x, x.y) < 5 && !(x.missedAt != null && now - x.missedAt < 300);
   return low(a) && low(b);
 }
 
@@ -2002,7 +2137,7 @@ function checkSafety(world) {
     const a = air[i];
     for (let j = i + 1; j < air.length; j++) {
       const b = air[j];
-      if (towerPair(a, b, ap)) continue;
+      if (towerPair(a, b, ap, world.t)) continue;
       const dv = Math.abs(a.alt - b.alt);
       const d = dist(a.x, a.y, b.x, b.y);
       if (d < lat - 0.05 && dv < vert - 50) { alerts.push({ type: 'LOS', ids: [a.id, b.id], key: `LOS:${a.id}:${b.id}`, d, dv }); continue; }
@@ -2109,7 +2244,7 @@ __def("js/parser/parser.js", function () {
 //   SQ1234 | ID                  squawk / ident
 // Lenient mode also accepts lower case, partial callsigns, spaces inside tokens and plain-English phrasing.
 
-const SIMPLE = { CL: 'CL', GA: 'GA', LU: 'LU', TO: 'TO', REL: 'REL', HO: 'HO', RES: 'RES', SN: 'SN', ID: 'ID', CAN: 'CAN' };
+const SIMPLE = { CL: 'CL', GA: 'GA', LU: 'LU', TO: 'TO', REL: 'REL', HO: 'HO', RES: 'RES', SN: 'SN', ID: 'ID' };
 
 const LENIENT_RULES = [
   [/\bCLEARED\s+(?:FOR\s+)?(?:THE\s+)?ILS(?:\s+APPROACH)?\s+(?:RUNWAY\s+|RWY\s+)?(\d{2}[LRC]?)/g, 'ILS $1'],
@@ -2206,6 +2341,7 @@ function parseCommand(text, ctx, opts = {}) {
     let m;
     if ((m = tok.match(/^([HLR])(\d{1,3})$/))) {
       const v = parseInt(m[2], 10);
+      if (v === 0) { res.errors.push(`Heading ${m[2]} invalid: north is 360`); continue; }
       if (v < 1 || v > 360) { res.errors.push(`Heading ${m[2]} out of range`); continue; }
       if (m[2].length !== 3 && !lenient) { res.errors.push(`Heading must be three digits: ${tok}`); continue; }
       push({ t: 'HDG', v, dir: m[1] === 'H' ? null : m[1] });
@@ -2298,119 +2434,6 @@ function suggest(text, ctx) {
 }
 
 return { normalise, resolveCallsign, parseCommand, CMD_HELP, suggest };
-});
-__def("js/sim/phrase.js", function () {
-// Radiotelephony phraseology helpers: spoken digits, callsigns, levels, readbacks.
-const DIG = ['zero', 'one', 'two', 'three', 'four', 'fife', 'six', 'seven', 'eight', 'niner'];
-const ALPHA = { A: 'Alpha', B: 'Bravo', C: 'Charlie', D: 'Delta', E: 'Echo', F: 'Foxtrot', G: 'Golf', H: 'Hotel', I: 'India', J: 'Juliet', K: 'Kilo', L: 'Lima', M: 'Mike', N: 'November', O: 'Oscar', P: 'Papa', Q: 'Quebec', R: 'Romeo', S: 'Sierra', T: 'Tango', U: 'Uniform', V: 'Victor', W: 'Whiskey', X: 'X-ray', Y: 'Yankee', Z: 'Zulu' };
-
-function digits(s) { return String(s).split('').map(c => (c >= '0' && c <= '9' ? DIG[+c] : ALPHA[c] || c)).join(' '); }
-function letter(c) { return ALPHA[c] || c; }
-
-function spokenCallsign(ac, short = false) {
-  if (ac.ga) {
-    const reg = ac.callsign; // e.g. GABCD
-    return short ? `${letter(reg[0])} ${digits(reg.slice(-2))}` : digits(reg);
-  }
-  return `${ac.rt} ${digits(ac.callsign.slice(ac.op.length))}`;
-}
-
-function spokenAlt(alt, ta) {
-  if (alt > ta) return `flight level ${digits(String(Math.round(alt / 100)).padStart(3, '0'))}`;
-  const th = Math.floor(alt / 1000), h = Math.round((alt % 1000) / 100);
-  return `altitude ${th ? digits(th) + ' thousand' : ''}${h ? ' ' + digits(h) + ' hundred' : ''} feet`.replace(/\s+/g, ' ');
-}
-function fmtAlt(alt, ta) { return alt > ta ? 'FL' + String(Math.round(alt / 100)).padStart(3, '0') : Math.round(alt) + 'ft'; }
-
-function spokenHdg(h) { return `heading ${digits(String(Math.round(h) || 360).padStart(3, '0'))}`; }
-function spokenFreq(f) { const [a, b = ''] = String(f).split('.'); const d = b.replace(/0+$/, ''); return `${digits(a)}${d ? ' decimal ' + digits(d) : ''}`; }
-function spokenUnit(u) { return u.replace(/\bCTR\b/i, 'control').replace(/\bAPP\b/i, 'approach').replace(/\bTWR\b/i, 'tower').toLowerCase(); }
-function spokenRwy(r) { return `runway ${digits(r.replace(/[LRC]/, ''))}${/L/.test(r) ? ' left' : /R/.test(r) ? ' right' : ''}`; }
-
-// Build readback text (display) and speech (spoken) for an applied command list.
-function readback(ac, cmds, ap, qnh) {
-  const disp = [], say = [];
-  for (const c of cmds) {
-    switch (c.t) {
-      case 'HDG': {
-        const h = String(c.v).padStart(3, '0');
-        disp.push(`${c.dir === 'L' ? 'left ' : c.dir === 'R' ? 'right ' : ''}heading ${h}`);
-        say.push(`${c.dir === 'L' ? 'turn left ' : c.dir === 'R' ? 'turn right ' : ''}${spokenHdg(c.v)}`);
-        break;
-      }
-      case 'TURN': disp.push(`turn ${c.deg}° ${c.dir === 'L' ? 'left' : 'right'}`); say.push(`turning ${digits(c.deg)} degrees ${c.dir === 'L' ? 'left' : 'right'}`); break;
-      case 'ALT': {
-        const verb = c.v > ac.alt + 50 ? 'climb' : c.v < ac.alt - 50 ? 'descend' : 'maintain';
-        disp.push(`${verb} ${fmtAlt(c.v, ap.ta)}${c.v <= ap.ta && verb === 'descend' ? ' QNH ' + qnh : ''}`);
-        say.push(`${verb} ${spokenAlt(c.v, ap.ta)}${c.v <= ap.ta && ac.alt > ap.ta ? ', QNH ' + digits(qnh) : ''}`);
-        break;
-      }
-      case 'SPD': disp.push(`speed ${c.v}`); say.push(`speed ${digits(c.v)} knots`); break;
-      case 'MACH': {
-        const m = c.v.toFixed(2), [w, fr] = m.split('.');
-        disp.push(`Mach ${m}`); say.push(`Mach ${w === '0' ? '' : digits(w) + ' '}point ${digits(fr.replace(/0$/, '') || '0')}`); break;
-      }
-      case 'SN': disp.push('normal speed'); say.push('resume normal speed'); break;
-      case 'DCT': disp.push(`direct ${c.fix}`); say.push(`direct ${c.fix.toLowerCase()}`); break;
-      case 'PATH':
-        if (c.rwy) { disp.push(`drawn track, ILS ${c.rwy}, cleared to land`); say.push(`vectors ILS ${spokenRwy(c.rwy)}, cleared to land`); }
-        else if (c.fix) { disp.push(`drawn track to ${c.fix}`); say.push(`routing as cleared to ${c.fix.toLowerCase()}`); }
-        else { disp.push('drawn track'); say.push('routing as cleared'); }
-        break;
-      case 'HOLD': disp.push(`hold at ${c.fix}`); say.push(`hold at ${c.fix.toLowerCase()}`); break;
-      case 'ILS': disp.push(`cleared ILS ${c.rwy}`); say.push(`cleared ILS approach ${spokenRwy(c.rwy)}`); break;
-      case 'EXP': disp.push(`expect ILS ${c.rwy}`); say.push(`expect ILS ${spokenRwy(c.rwy)}`); break;
-      case 'CL': disp.push(`cleared to land ${c.rwy || ''}`.trim()); say.push(`cleared to land${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
-      case 'GA': disp.push('going around'); say.push('going around'); break;
-      case 'LU': disp.push(`line up and wait ${c.rwy || ''}`.trim()); say.push(`line up and wait${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
-      case 'TO': disp.push(`cleared for take-off ${c.rwy || ''}`.trim()); say.push(`cleared for take-off${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
-      case 'RES': disp.push('resuming own navigation'); say.push('resuming own navigation'); break;
-      case 'SQK': disp.push(`squawk ${c.code}`); say.push(`squawk ${digits(c.code)}`); break;
-      case 'ID': disp.push('squawk ident'); say.push('ident'); break;
-      case 'HO': disp.push(`${c.unit} ${c.freq}`); say.push(`${spokenUnit(c.unit)} ${spokenFreq(c.freq)}, good day`); break;
-      default: break;
-    }
-  }
-  const cs = spokenCallsign(ac, true);
-  return { text: disp.join(', '), speech: say.join(', ') + ', ' + cs };
-}
-
-// Controller phrasing for an instruction (used when the instructor transmits for you). Callsign first, as on
-// the real frequency; levels and headings in the same form the pilot reads back.
-function instruction(ac, cmds, ap, qnh) {
-  const say = [];
-  for (const c of cmds) {
-    switch (c.t) {
-      case 'HDG': say.push(`${c.dir === 'L' ? 'turn left ' : c.dir === 'R' ? 'turn right ' : 'fly '}${spokenHdg(c.v)}`); break;
-      case 'TURN': say.push(`turn ${c.dir === 'L' ? 'left' : 'right'} ${digits(c.deg)} degrees`); break;
-      case 'ALT': {
-        const verb = c.v > ac.alt + 50 ? 'climb' : c.v < ac.alt - 50 ? 'descend' : 'maintain';
-        say.push(`${verb} ${spokenAlt(c.v, ap.ta)}${c.v <= ap.ta && ac.alt > ap.ta && qnh ? ', QNH ' + digits(qnh) : ''}`);
-        break;
-      }
-      case 'SPD': say.push(`speed ${digits(c.v)} knots`); break;
-      case 'MACH': { const [w, fr] = c.v.toFixed(2).split('.'); say.push(`Mach ${w === '0' ? '' : digits(w) + ' '}point ${digits(fr.replace(/0$/, '') || '0')}`); break; }
-      case 'SN': say.push('resume normal speed'); break;
-      case 'DCT': say.push(`proceed direct ${c.fix.toLowerCase()}`); break;
-      case 'PATH': say.push(c.rwy ? `vectors for the ILS ${spokenRwy(c.rwy)}, cleared to land` : c.fix ? `route as cleared to ${c.fix.toLowerCase()}` : 'route as cleared'); break;
-      case 'HOLD': say.push(`hold at ${c.fix.toLowerCase()}, as published`); break;
-      case 'ILS': say.push(`cleared ILS approach ${spokenRwy(c.rwy || ac.app?.rwy || '')}`); break;
-      case 'EXP': say.push(`expect ILS approach ${spokenRwy(c.rwy)}`); break;
-      case 'CL': { const r = c.rwy || ac.app?.rwy; say.push(`${r ? spokenRwy(r) + ', ' : ''}cleared to land`); break; }
-      case 'GA': say.push('go around, I say again, go around'); break;
-      case 'LU': say.push(`line up and wait${c.rwy ? ' ' + spokenRwy(c.rwy) : ''}`); break;
-      case 'TO': say.push(`${c.rwy ? spokenRwy(c.rwy) + ', ' : ''}cleared for take-off`); break;
-      case 'RES': say.push('resume own navigation'); break;
-      case 'SQK': say.push(`squawk ${digits(c.code)}`); break;
-      case 'ID': say.push('squawk ident'); break;
-      case 'HO': if (c.unit) say.push(`contact ${spokenUnit(c.unit)} ${spokenFreq(c.freq)}`); break;
-      default: break;
-    }
-  }
-  return say.length ? `${spokenCallsign(ac)}, ${say.join(', ')}` : '';
-}
-
-return { digits, letter, spokenCallsign, spokenAlt, fmtAlt, spokenHdg, spokenFreq, spokenUnit, spokenRwy, readback, instruction };
 });
 __def("js/sim/assist.js", function () {
 // OJTI: an on-the-job training instructor working the frequency beside you. Every controller task is owned either by
@@ -5031,20 +5054,12 @@ class Radar {
     const gl = glCanvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
     if (!gl) throw new Error('WebGL2 unavailable');
     this.gl = gl;
-    this.float = !!gl.getExtension('EXT_color_buffer_float');
-    this.progs = makePrograms(gl);
-    const P = this.progs;
-    this.map = { tri: new TriBatch(gl, P.tri), lines: new LineBatch(gl, P.line), syms: new SymbolBatch(gl, P.sym) };
-    this.dyn = { lines: new LineBatch(gl, P.line), syms: new SymbolBatch(gl, P.sym), top: new SymbolBatch(gl, P.sym) };
     this.ctx = overlay.getContext('2d');
     this.labels = new Labels(this);
     this.view = { cx: 0, cy: 0, scale: 10 };
     this.range = 40;
     this.dpr = 1; this.w = 1; this.h = 1;
-    this.scene = new Target(gl, 2, 2, this.float);
-    this.b1 = new Target(gl, 2, 2, this.float); this.b1b = new Target(gl, 2, 2, this.float);
-    this.b2 = new Target(gl, 2, 2, this.float); this.b2b = new Target(gl, 2, 2, this.float);
-    this.satT = new Target(gl, 2, 2, false); this.satKey = ''; this.demId = null; this.demTex = null;
+    this.initGL();
     this.paint = new Map(); // phosphor: id -> { x, y, t } position when the beam last swept the target
     this.prevAng = null;
     this.style = 'phosphor';
@@ -5052,6 +5067,25 @@ class Radar {
     this.frame = 0;
     this.lost = false;
     glCanvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; });
+    glCanvas.addEventListener('webglcontextrestored', () => {
+      // every GL object died with the context: rebuild them and force the map, underlay and targets to be redrawn
+      try { this.initGL(); this.w = 0; this.mapKey = ''; this.resize(); this.lost = false; } catch (e) { console.warn('radar: could not rebuild after context loss', e); }
+    });
+  }
+
+  // all GL-side state (programs, batches, targets, textures); called again after a context restore
+  initGL() {
+    const gl = this.gl;
+    this.float = !!gl.getExtension('EXT_color_buffer_float');
+    this.progs = makePrograms(gl);
+    const P = this.progs;
+    this.map = { tri: new TriBatch(gl, P.tri), lines: new LineBatch(gl, P.line), syms: new SymbolBatch(gl, P.sym) };
+    this.dyn = { lines: new LineBatch(gl, P.line), syms: new SymbolBatch(gl, P.sym), top: new SymbolBatch(gl, P.sym) };
+    this.scene = new Target(gl, 2, 2, this.float);
+    this.b1 = new Target(gl, 2, 2, this.float); this.b1b = new Target(gl, 2, 2, this.float);
+    this.b2 = new Target(gl, 2, 2, this.float); this.b2b = new Target(gl, 2, 2, this.float);
+    this.satT = new Target(gl, 2, 2, false); this.satKey = ''; this.demId = null; this.demTex = null;
+    this.mapKey = '';
   }
 
   get pal() { return PALETTES[this.style]; }
@@ -6591,20 +6625,47 @@ function decode(raw) {
   });
 }
 
-// The decoded pack if it has arrived, else null (and the load is started).
+// Load failures (missing file, flaky link, truncated script, decode error) clear the 'asked' flag so a later request retries,
+// after a growing delay and at most MAX_TRIES times per round. A failed round is reported through onGeoStatus.
+const MAX_TRIES = 3, BACKOFF_MS = [3000, 12000], TIMEOUT_MS = 45000;
+const tries = {}, retryAt = {};
+let notify = null;
+function onGeoStatus(fn) { notify = fn; }
+
+function fail(id, why, el, timer) {
+  clearTimeout(timer);
+  if (el && el.parentNode) el.remove();
+  const W = window; if (W.__ATC_GEO) delete W.__ATC_GEO[id];
+  asked[id] = false;
+  const n = tries[id] = (tries[id] || 0) + 1;
+  if (n < MAX_TRIES) { retryAt[id] = performance.now() + BACKOFF_MS[n - 1]; console.warn(`geoPack ${id}: ${why}; will retry (attempt ${n + 1} of ${MAX_TRIES})`); }
+  else {
+    retryAt[id] = performance.now() + 60000; tries[id] = 0;   // give up for now; a request a minute later starts a fresh round
+    console.warn(`geoPack ${id}: ${why}; giving up for now, the tower view stays procedural`);
+    if (notify) try { notify(id, 'failed'); } catch (e) { /* ignore */ }
+  }
+}
+
+// The decoded pack if it has arrived, else null (and the load is started, or retried after a failure).
 function geoPack(id) {
   if (ready[id]) return ready[id];
   if (asked[id] || typeof document === 'undefined' || typeof Image === 'undefined') return null;
+  if (retryAt[id] && performance.now() < retryAt[id]) return null;
   asked[id] = true;
-  const W = window, got = () => { const raw = W.__ATC_GEO && W.__ATC_GEO[id]; if (raw) decode(raw).then(p => { ready[id] = p; delete W.__ATC_GEO[id]; }, () => {}); };
-  const prev = W.__ATC_GEO_READY;
-  W.__ATC_GEO_READY = k => { if (k === id) got(); else if (prev) prev(k); };
-  const s = document.createElement('script'); s.src = 'geo/' + id + '.js'; s.async = true; s.onerror = () => {};
+  const W = window, s = document.createElement('script');
+  const timer = setTimeout(() => { s.onload = s.onerror = null; fail(id, 'timed out', s, timer); }, TIMEOUT_MS);
+  s.onload = () => {
+    const raw = W.__ATC_GEO && W.__ATC_GEO[id];
+    if (!raw) { fail(id, 'script loaded but holds no pack', s, timer); return; }
+    decode(raw).then(p => { clearTimeout(timer); ready[id] = p; delete W.__ATC_GEO[id]; if (s.parentNode) s.remove(); }, e => fail(id, 'decode failed: ' + (e && e.message || e), s, timer));
+  };
+  s.onerror = () => fail(id, 'script failed to load', s, timer);
+  s.src = 'geo/' + id + '.js'; s.async = true;
   document.head.appendChild(s);
   return null;
 }
 
-return { geoPack };
+return { onGeoStatus, geoPack };
 });
 __def("js/render/geoLive.js", function () {
 // Live aerial imagery for the tower views: when the machine is online, sub-metre tiles are streamed for the area
@@ -23623,6 +23684,31 @@ class Tower {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, stencil: true, premultipliedAlpha: false });
     if (!gl) throw new Error('WebGL2 unavailable');
     this.gl = gl;
+    this.initGL();
+    this.apKey = null; this.scene = null;
+    this.yaw = 0; this.pitch = 0; this.fov = 50 * DEG;
+    this.tYaw = 0; this.tPitch = 0; this.tFov = 50 * DEG;
+    this.preset = 'arr'; this.binos = false; this.showFrame = true; this.needAim = true;
+    this.screen = new Map();
+    this.top = { x: 0, y: 0, span: 14 };   // top-down view: centre (nm) and half-height (nm)
+    this.w = this.h = 1; this.dpr = 1;
+    this.lost = false; this.lastNow = 0; this.lastSimT = -1;
+    this.track = new Map(); this.ghosts = []; this.lineups = new Map();
+    canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; });
+    canvas.addEventListener('webglcontextrestored', () => {
+      // every GL object died with the context: drop the stale handles, recreate the shared ones and force a scene rebuild
+      try {
+        for (const k of ['geoTex', 'liveTex', 'nearTex', 'rwTex', 'rwWear', 'terrainVao', 'terrainVbo', 'terrainIbo', 'paveVao', 'paveVbo']) this[k] = null;
+        this.live = this.near = null; this.liveOn = this.nearOn = false;
+        this.initGL(); this.apKey = null; this.ap = null; this.lost = false;
+      } catch (e) { console.warn('tower: could not rebuild after context loss', e); }
+    });
+    this.buildBar();
+  }
+
+  // shared GL state (programs, quad, mesh library, light buffers); the per-airport scene is built in build()
+  initGL() {
+    const gl = this.gl;
     this.aniso = gl.getExtension('EXT_texture_filter_anisotropic');
     this.p = {
       sky: compile(gl, SKY_VS, SKY_FS), terrain: compile(gl, TERRAIN_VS, TERRAIN_FS), water: compile(gl, WATER_VS, WATER_FS),
@@ -23640,17 +23726,6 @@ class Tower {
     for (const [k, m] of Object.entries(lib)) if (!k.endsWith('_LO')) this.meshes[k] = this.makeMesh(m, lib[k + '_LO']);
     this.lightS = this.makeLights(); this.lightD = this.makeLights();
     this.dynLights = new Float32Array(12 * 4096); this.nDyn = 0;
-    this.apKey = null; this.scene = null;
-    this.yaw = 0; this.pitch = 0; this.fov = 50 * DEG;
-    this.tYaw = 0; this.tPitch = 0; this.tFov = 50 * DEG;
-    this.preset = 'arr'; this.binos = false; this.showFrame = true; this.needAim = true;
-    this.screen = new Map();
-    this.top = { x: 0, y: 0, span: 14 };   // top-down view: centre (nm) and half-height (nm)
-    this.w = this.h = 1; this.dpr = 1;
-    this.lost = false; this.lastNow = 0; this.lastSimT = -1;
-    this.track = new Map(); this.ghosts = []; this.lineups = new Map();
-    canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; });
-    this.buildBar();
   }
 
   // ---------- GL resources ----------
@@ -25089,6 +25164,7 @@ class Commands {
   }
 
   key(e) {
+    if (this.g.menus.open) return;   // a modal owns the keyboard: no commands, Esc reaches the global handler
     if (e.key === 'Tab') {
       e.preventDefault();
       if (!this.acBox.hidden && this.items.length) {
@@ -25331,6 +25407,17 @@ class Menus {
     this.kind = null;
     this.tut = null;
     this.el.addEventListener('mousedown', e => { if (e.target === this.el && this.kind !== 'main' && this.kind !== 'debrief' && this.kind !== 'brief' && this.kind !== 'hangar') this.close(); });
+    this.el.setAttribute('role', 'dialog'); this.el.setAttribute('aria-modal', 'true');
+    this.prevFocus = null;
+    // keep Tab inside the dialog
+    this.el.addEventListener('keydown', e => {
+      if (e.key !== 'Tab' || !this.open) return;
+      const f = [...this.el.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')].filter(x => !x.disabled && x.tabIndex >= 0 && x.offsetParent !== null);
+      if (!f.length) { e.preventDefault(); return; }
+      const i = f.indexOf(document.activeElement), last = f.length - 1;
+      if (e.shiftKey && i <= 0) { e.preventDefault(); f[last].focus(); }
+      else if (!e.shiftKey && (i === -1 || i === last)) { e.preventDefault(); f[0].focus(); }
+    });
   }
 
   get open() { return !this.el.hidden; }
@@ -25339,8 +25426,16 @@ class Menus {
     this.kind = kind;
     this.stopReplay();
     this.el.innerHTML = '';
-    this.el.append(h(narrow ? 'div.modal.narrow' : 'div.modal', node));
+    const wasOpen = this.open, box = h(narrow ? 'div.modal.narrow' : 'div.modal', node);
+    this.el.append(box);
     this.el.hidden = false;
+    // accessibility: name the dialog, move focus into it (the command line must not keep it), remember where to return
+    const title = box.querySelector('h1, h2, h3');
+    if (title) { title.id = 'modalTitle'; this.el.setAttribute('aria-labelledby', 'modalTitle'); this.el.removeAttribute('aria-label'); }
+    else { this.el.removeAttribute('aria-labelledby'); this.el.setAttribute('aria-label', 'Menu'); }
+    if (!wasOpen) this.prevFocus = document.activeElement instanceof HTMLElement && !this.el.contains(document.activeElement) ? document.activeElement : null;
+    box.tabIndex = -1; box.style.outline = 'none';
+    box.focus({ preventScroll: true });
     this.g.onModal(true);
   }
 
@@ -25351,6 +25446,8 @@ class Menus {
     this.el.hidden = true; this.el.innerHTML = '';
     const k = this.kind; this.kind = null;
     this.g.onModal(false, k);
+    const pf = this.prevFocus; this.prevFocus = null;
+    if (pf && pf.isConnected && !pf.hidden && pf !== document.activeElement && pf.id !== 'cmdIn') pf.focus({ preventScroll: true });
   }
 
   // ---------- main menu ----------
@@ -25912,7 +26009,7 @@ const { World, SIM_DT } = __m("js/sim/world.js");
 const { arrivalSpec, overflightSpec } = __m("js/sim/traffic.js");
 const { Radar } = __m("js/render/radar.js");
 const { Tower } = __m("js/render/tower.js");
-const { geoPack } = __m("js/render/geoPack.js");
+const { geoPack, onGeoStatus } = __m("js/render/geoPack.js");
 const { Panels } = __m("js/ui/panels.js");
 const { Strips } = __m("js/ui/strips.js");
 const { Training } = __m("js/ui/training.js");
@@ -25950,6 +26047,8 @@ class Game {
     this.radial = new Radial(this);
     this.menus = new Menus(this);
     this.bindInput();
+    // a failed imagery pack is not worth interrupting the menu for: say so once the tower view is (or gets) opened
+    onGeoStatus(() => { this.geoFailed = true; if (this.towerOn) this.geoNotice(); });
     window.addEventListener('resize', () => { this.applyUiScale(); });
     this.startDemo();
     this.menus.main();
@@ -26105,7 +26204,7 @@ class Game {
     this.select(n.id);
   }
   centerOn(id) { const a = this.world?.find(id); if (a) this.radar.center(a.x, a.y); }
-  focusCmd() { const el = $('#cmdIn'); if (document.activeElement !== el) el.focus({ preventScroll: true }); }
+  focusCmd() { if (this.menus.open) return; const el = $('#cmdIn'); if (document.activeElement !== el) el.focus({ preventScroll: true }); }
 
   setSpeed(v) {
     if (v === 0) { this.paused = !this.paused; return; }
@@ -26120,12 +26219,15 @@ class Game {
       try { this.tower = new Tower($('#tower')); } catch (e) { this.menus.toast('Tower view needs WebGL2, which is unavailable here.', 'w'); return; }
     }
     this.towerOn = !this.towerOn;
+    if (this.towerOn && this.geoFailed) this.geoNotice();
     $('#tower').hidden = !this.towerOn;
     $('#gl').hidden = this.towerOn;
     $('#ov').style.filter = this.towerOn ? 'none' : this.radar.pal.glow;
     this.tower.setVisible?.(this.towerOn);
     this.radial.hide();
   }
+
+  geoNotice() { this.geoFailed = false; this.menus.toast('Real-world imagery could not be loaded; the tower view is using generic scenery (it will retry).', 'w', 6000); }
 
   onModal(open) {
     this.modalPause = open && !this.demo;
