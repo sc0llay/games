@@ -46,6 +46,17 @@ function watchContext(canvas) {
   }, false);
 }
 
+// Offline cache (sw.js). Skipped for the single-file build and on local dev hosts (stale code) unless ?sw=1.
+function registerWorker(app) {
+  try {
+    if (!('serviceWorker' in navigator) || window.__ORION_ASSETS__) return;
+    const dev = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    if (dev && !/[?&]sw=1\b/.test(location.search)) return;
+    const go = () => navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('[orion] service worker unavailable', err));
+    app.events.addEventListener('frame', () => setTimeout(go, 1000), { once: true });
+  } catch { /* optional */ }
+}
+
 async function boot() {
   const canvas = document.getElementById('scene');
   const gpuProblem = checkGPU();
@@ -80,6 +91,7 @@ async function boot() {
     await app.renderer.compileAsync(app.layers.sky, app.cameras.sky);
   } catch (err) { console.warn('[orion] shader precompile skipped', err); }
   app.start();
+  registerWorker(app);
   const poster = document.getElementById('poster');
   if (poster) { poster.classList.add('gone'); setTimeout(() => poster.remove(), 1200); }
 }

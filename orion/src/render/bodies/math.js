@@ -151,6 +151,13 @@ export function imageSize(buf) {
     const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
     return { w: dv.getUint32(16), h: dv.getUint32(20) };
   }
+  if (b.length > 30 && b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) {   // RIFF....WEBP
+    const t = String.fromCharCode(b[12], b[13], b[14], b[15]);
+    if (t === 'VP8 ') return { w: (b[26] | b[27] << 8) & 0x3fff, h: (b[28] | b[29] << 8) & 0x3fff };
+    if (t === 'VP8L') return { w: 1 + ((b[21] | (b[22] & 0x3f) << 8)), h: 1 + ((b[22] >> 6 | b[23] << 2 | (b[24] & 0xf) << 10)) };
+    if (t === 'VP8X') return { w: 1 + (b[24] | b[25] << 8 | b[26] << 16), h: 1 + (b[27] | b[28] << 8 | b[29] << 16) };
+    return null;
+  }
   if (b[0] === 0xff && b[1] === 0xd8) {
     let i = 2;
     while (i + 9 < b.length) {
@@ -163,4 +170,13 @@ export function imageSize(buf) {
     }
   }
   return null;
+}
+
+/** Path of the smallest size variant of map `key` whose width >= `cap` (manifest `variants`), else the original path. */
+export function pickVariant(entry, key, cap) {
+  const orig = entry.maps[key], v = entry.variants && entry.variants[key];
+  if (!v) return orig;
+  let best = null, bw = Infinity;
+  for (const k of Object.keys(v)) { const w = +k; if (w >= cap && w < bw) { bw = w; best = v[k]; } }
+  return best || orig;
 }

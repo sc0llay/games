@@ -28,7 +28,13 @@
    ],
    "scale": 1.272,
    "albedo": 0.52,
-   "grsU": 0.3682
+   "grsU": 0.3682,
+   "variants": {
+    "color": {
+     "2048": "data/textures/jupiter/color-2k.webp",
+     "4096": "data/textures/jupiter/color-4k.webp"
+    }
+   }
   },
   "moon": {
    "lon0": -180,
@@ -49,6 +55,16 @@
     "scaleKm": 0.0005,
     "w": 5760,
     "h": 2880
+   },
+   "variants": {
+    "color": {
+     "2048": "data/textures/moon/color-2k.webp",
+     "4096": "data/textures/moon/color-4k.webp"
+    },
+    "height": {
+     "2048": "data/textures/moon/height-2k.webp",
+     "4096": "data/textures/moon/height-4k.webp"
+    }
    }
   },
   "earth": {
@@ -67,7 +83,27 @@
     0.1897
    ],
    "scale": 1.1,
-   "albedo": 0.13
+   "albedo": 0.13,
+   "variants": {
+    "color": {
+     "2048": "data/textures/earth/color-2k.webp",
+     "4096": "data/textures/earth/color-4k.webp"
+    },
+    "night": {
+     "2048": "data/textures/earth/night-2k.webp",
+     "4096": "data/textures/earth/night-4k.webp"
+    },
+    "clouds": {
+     "2048": "data/textures/earth/clouds-2k.webp",
+     "4096": "data/textures/earth/clouds-4k.webp"
+    },
+    "normal": {
+     "2048": "data/textures/earth/normal-2k.webp"
+    },
+    "spec": {
+     "2048": "data/textures/earth/spec-2k.webp"
+    }
+   }
   },
   "mercury": {
    "lon0": -180,
@@ -81,7 +117,12 @@
     0.2286
    ],
    "scale": 0.6122,
-   "albedo": 0.14
+   "albedo": 0.14,
+   "variants": {
+    "color": {
+     "2048": "data/textures/mercury/color-2k.webp"
+    }
+   }
   },
   "venus": {
    "lon0": -180,
@@ -95,7 +136,12 @@
     0.2198
    ],
    "scale": 1.3562,
-   "albedo": 0.75
+   "albedo": 0.75,
+   "variants": {
+    "color": {
+     "2048": "data/textures/venus/color-2k.webp"
+    }
+   }
   },
   "mars": {
    "lon0": -180,
@@ -116,6 +162,16 @@
     "scaleKm": 0.001,
     "w": 5760,
     "h": 2880
+   },
+   "variants": {
+    "color": {
+     "2048": "data/textures/mars/color-2k.webp",
+     "4096": "data/textures/mars/color-4k.webp"
+    },
+    "height": {
+     "2048": "data/textures/mars/height-2k.webp",
+     "4096": "data/textures/mars/height-4k.webp"
+    }
    }
   },
   "saturn": {
@@ -130,7 +186,12 @@
     0.3918
    ],
    "scale": 0.7649,
-   "albedo": 0.47
+   "albedo": 0.47,
+   "variants": {
+    "color": {
+     "2048": "data/textures/saturn/color-2k.webp"
+    }
+   }
   },
   "neptune": {
    "lon0": -180,
@@ -158,7 +219,12 @@
     0.1133
    ],
    "scale": 2.3693,
-   "albedo": 0.62
+   "albedo": 0.62,
+   "variants": {
+    "color": {
+     "2048": "data/textures/io/color-2k.webp"
+    }
+   }
   },
   "europa": {
    "lon0": 0,
@@ -184,7 +250,12 @@
      1.0,
      0.95
     ]
-   ]
+   ],
+   "variants": {
+    "color": {
+     "2048": "data/textures/europa/color-2k.webp"
+    }
+   }
   },
   "ganymede": {
    "lon0": 0,
@@ -198,7 +269,12 @@
     0.1431
    ],
    "scale": 2.4345,
-   "albedo": 0.43
+   "albedo": 0.43,
+   "variants": {
+    "color": {
+     "2048": "data/textures/ganymede/color-2k.webp"
+    }
+   }
   },
   "callisto": {
    "lon0": 0,
@@ -224,7 +300,12 @@
      1.0,
      1.0
     ]
-   ]
+   ],
+   "variants": {
+    "color": {
+     "2048": "data/textures/callisto/color-2k.webp"
+    }
+   }
   },
   "enceladus": {
    "lon0": 0,
@@ -368,7 +449,12 @@
     0.1634
    ],
    "scale": 3.1335,
-   "albedo": 0.7
+   "albedo": 0.7,
+   "variants": {
+    "color": {
+     "2048": "data/textures/triton/color-2k.webp"
+    }
+   }
   },
   "pluto": {
    "lon0": 0,
@@ -395,7 +481,12 @@
      0.9
     ]
    ],
-   "nodata": true
+   "nodata": true,
+   "variants": {
+    "color": {
+     "2048": "data/textures/pluto/color-2k.webp"
+    }
+   }
   },
   "charon": {
    "lon0": -180,

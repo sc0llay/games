@@ -7,18 +7,32 @@ export const TIERS = {
 };
 const ORDER = ['low', 'medium', 'high', 'ultra'];
 
+// Pure first-guess tier from the adapter string and device hints (undefined hints are ignored).
+export function initialTier({ gpu = '', mobile = false, touch = 0, width = 1920, deviceMemory, cores } = {}) {
+  let i;
+  if (mobile) i = 0;
+  else if (/Intel|Mali|Adreno|PowerVR|SwiftShader|llvmpipe/i.test(gpu)) i = 1;
+  else if (/RTX (30[89]0|40[789]0|50\d0)|RX 7[89]00|M[1-4] (Max|Ultra)/i.test(gpu)) i = 3;
+  else i = 2;
+  if (touch > 1 && width < 900) i = Math.min(i, 1);
+  if ((deviceMemory != null && deviceMemory <= 4) || (cores != null && cores <= 4)) i = Math.min(i, 1);
+  return ORDER[i];
+}
+
 export class Quality extends EventTarget {
   constructor(renderer) {
     super();
     const gl = renderer.getContext();
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     this.gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown';
-    const mobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && innerWidth < 900);
-    let tier = 'high';
-    if (mobile) tier = 'low';
-    else if (/Intel|Mali|Adreno|PowerVR|SwiftShader|llvmpipe/i.test(this.gpu)) tier = 'medium';
-    else if (/RTX (30[89]0|40[789]0|50\d0)|RX 7[89]00|M[1-4] (Max|Ultra)/i.test(this.gpu)) tier = 'ultra';
     const saved = (() => { try { return localStorage.getItem('orion.tier'); } catch { return null; } })();
+    const auto = (() => { try { return JSON.parse(localStorage.getItem('orion.autoTier') || 'null'); } catch { return null; } })();
+    const mobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent);
+    const start = initialTier({ gpu: this.gpu, mobile, touch: navigator.maxTouchPoints || 0, width: innerWidth,
+      deviceMemory: navigator.deviceMemory, cores: navigator.hardwareConcurrency });
+    // A previously auto-downgraded tier sticks, but only on the same GPU and only if it is lower than the heuristic.
+    const remembered = auto && auto.gpu === this.gpu && TIERS[auto.tier] && ORDER.indexOf(auto.tier) < ORDER.indexOf(start) ? auto.tier : null;
+    const tier = remembered || start;
     this.auto = !saved;
     this.tier = saved && TIERS[saved] ? saved : tier;
     this.scale = this.settings.renderScale[1];
@@ -42,7 +56,8 @@ export class Quality extends EventTarget {
   setTier(t, manual = true) {
     if (!TIERS[t] || t === this.tier) return;
     this.tier = t; this.scale = this.settings.renderScale[1]; this.#gov = newGovernor(this.#gov.valid);
-    if (manual) { this.auto = false; try { localStorage.setItem('orion.tier', t); } catch {} }
+    if (manual) { this.auto = false; try { localStorage.setItem('orion.tier', t); localStorage.removeItem('orion.autoTier'); } catch {} }
+    else { try { localStorage.setItem('orion.autoTier', JSON.stringify({ tier: t, gpu: this.gpu })); } catch {} }
     this.dispatchEvent(new CustomEvent('tier', { detail: t }));
   }
   // Bracket the frame's GPU work with a timer query (when the extension exists). Results arrive a few frames later.

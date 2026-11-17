@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { NOISE, HEIGHT_PACK, SPHERE_MATH } from 'orion/render/bodies/glsl.js';
-import { mapCaps, imageSize } from 'orion/render/bodies/math.js';
+import { mapCaps, imageSize, pickVariant } from 'orion/render/bodies/math.js';
 import { decodeLandMask, LAND_W, LAND_H } from 'orion/render/bodies/landmask.js';
 
 // Procedural equirectangular surface maps, rendered once on the GPU into render targets.
@@ -619,9 +619,10 @@ export class PhotoLibrary {
   async loadMaps(id, keys, caps) {
     const e = this.entry(id);
     if (!e) throw new Error('no photo maps for ' + id);
-    const m = e.maps, tex = {}, errors = {};
+    const tex = {}, errors = {};
     const run = (k) => {
-      if (!m[k]) return Promise.reject(new Error('no ' + k + ' map'));
+      if (!e.maps[k]) return Promise.reject(new Error('no ' + k + ' map'));
+      const m = { [k]: pickVariant(e, k, caps[k]) };   // smallest size variant that still covers the cap
       switch (k) {
         case 'color': return this.#texture(m.color, caps.color, { srgb: !!e.srgb, red: !!e.tint });
         case 'night': return this.#texture(m.night, caps.night, { srgb: true });
