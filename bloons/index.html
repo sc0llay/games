@@ -5195,17 +5195,15 @@ BTD.Game = (function () {
     t.eff = e;
   }
 
-  /* Beacons do not stack.  For each stat a monkey takes the strongest single
-     beacon covering it: the largest buffRange, the smallest buffRate (fastest)
-     and the largest buffPierce.  The ceiling is therefore the best single
-     beacon tier in the data (Grand Beacon), so range, fire rate and
-     projectile lifetime stay bounded however many beacons are built. */
+  /* Beacons compound.  Each one in range contributes its own multiplier and
+     they are multiplied together, so a monkey standing under two beacons is
+     genuinely better off than under one.  Pierce is a flat bonus, so those
+     simply add.  Projectile travel is capped at 1.15x the buffed range. */
   function refreshBuffs() {
     var i, j;
     for (i = 0; i < S.towers.length; i++) {
       recomputeEffective(S.towers[i]);
       S.towers[i].beacons = 0;
-      S.towers[i]._bR = 1; S.towers[i]._bC = 1; S.towers[i]._bP = 0;
     }
     for (i = 0; i < S.towers.length; i++) {
       var b = S.towers[i];
@@ -5215,17 +5213,11 @@ BTD.Game = (function () {
         var t = S.towers[j];
         if (t === b || t.stats.support) continue;
         if (BTD.U.dist2(b.x, b.z, t.x, t.z) > b.stats.range * b.stats.range) continue;
-        if (b.stats.buffRange > t._bR) t._bR = b.stats.buffRange;
-        if (b.stats.buffRate < t._bC) t._bC = b.stats.buffRate;
-        if (b.stats.buffPierce > t._bP) t._bP = b.stats.buffPierce;
+        t.eff.range *= b.stats.buffRange;
+        t.eff.cd *= b.stats.buffRate;
+        t.eff.pierce += b.stats.buffPierce;
         t.beacons++;
       }
-    }
-    for (i = 0; i < S.towers.length; i++) {
-      var bt = S.towers[i];
-      bt.eff.range *= bt._bR;
-      bt.eff.cd *= bt._bC;
-      bt.eff.pierce += bt._bP;
     }
     /* A stack deep enough to drive the cooldown under one tick would only
        report a firing rate the simulation cannot actually deliver. */
